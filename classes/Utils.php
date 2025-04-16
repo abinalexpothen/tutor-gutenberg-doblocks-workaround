@@ -9601,6 +9601,9 @@ class Utils {
 		return $date->format( ! is_null( $format ) ? $format : get_option( 'date_format' ) . ', ' . get_option( 'time_format' ) );
 	}
 
+	private $myblockheader;
+	private $myblockfooter;
+
 	/**
 	 * Tutor custom header.
 	 *
@@ -9616,16 +9619,20 @@ class Utils {
 				<html <?php language_attributes(); ?>>
 				<head>
 					<meta charset="<?php bloginfo( 'charset' ); ?>">
-					<?php wp_head(); ?>
+					<?php 
+					  $theme      = wp_get_theme();
+						$theme_slug = $theme->get( 'TextDomain' );
+						$this->myblockheader = do_blocks( '<!-- wp:template-part {"slug":"header","theme":"' . $theme_slug . '","tagName":"header","className":"site-header","layout":{"inherit":true}} /-->' );
+						$this->myblockfooter = do_blocks( '<!-- wp:template-part {"slug":"footer","theme":"' . $theme_slug . '","tagName":"footer","className":"site-footer","layout":{"inherit":true}} /-->' );
+						wp_head(); 
+					?>
 				</head>
 				<body <?php body_class(); ?>>
 				<?php wp_body_open(); ?>
 					<div class="wp-site-blocks">
 					<?php
-						$theme      = wp_get_theme();
-						$theme_slug = $theme->get( 'TextDomain' );
-						echo do_blocks( '<!-- wp:template-part {"slug":"header","theme":"' . $theme_slug . '","tagName":"header","className":"site-header","layout":{"inherit":true}} /-->' );
-		} else {
+						echo $this->myblockheader; 
+			} else {
 			get_header();
 		}
 	}
@@ -9638,9 +9645,7 @@ class Utils {
 	public function tutor_custom_footer() {
 		global $wp_version;
 		if ( version_compare( $wp_version, '5.9', '>=' ) && function_exists( 'wp_is_block_theme' ) && true === wp_is_block_theme() ) {
-			$theme      = wp_get_theme();
-			$theme_slug = $theme->get( 'TextDomain' );
-			echo do_blocks( '<!-- wp:template-part {"slug":"footer","theme":"' . $theme_slug . '","tagName":"footer","className":"site-footer","layout":{"inherit":true}} /-->' );
+			echo $this->myblockfooter;
 			echo '</div>';
 			wp_footer();
 			echo '</body>';
