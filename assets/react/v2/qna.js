@@ -41,7 +41,7 @@ window.jQuery(document).ready($=>{
             },
             success: resp=>{
                 if(!resp.success) {
-                    tutor_toast('Error!', get_response_message(resp), 'error');
+                    tutor_toast(__('Error!', 'tutor'), get_response_message(resp), 'error');
                     return;
                 }
 
@@ -110,8 +110,8 @@ window.jQuery(document).ready($=>{
         let question_id = button.closest('[data-question_id]').data('question_id');
         let course_id   = button.closest('[data-course_id]').data('course_id');
         let context     = button.closest('[data-context]').data('context');
-        let answer      = '' !== currentEditor ? tinymce.get(currentEditor).getContent({format: 'raw'}) : form.find('textarea').val();
- 
+        let answer      = '' !== currentEditor ? tinymce.get(currentEditor).getContent() : form.find('textarea').val();
+
         let back_url    = $(this).data('back_url');
 
         const btnInnerHtml = button.html().trim();
@@ -124,12 +124,12 @@ window.jQuery(document).ready($=>{
         if (_tutorobject.tutor_pro_url && currentEditor !== '') {
             let tinyMCEContent = tinymce.get(currentEditor).getContent();
             if (tinyMCEContent === '') {
-                tutor_toast('Warning!', __( 'Empty Content not Allowed', 'tutor'), 'error');
+                tutor_toast(__('Warning!', 'tutor'), __('Empty Content not Allowed', 'tutor'), 'error');
                 return;
             }
         } else {
             if (answer === '') {
-                tutor_toast('Warning!', __( 'Empty Content not Allowed', 'tutor'), 'error');
+                tutor_toast(__('Warning!', 'tutor'), __('Empty Content not Allowed', 'tutor'), 'error');
                 return;
             }
         }
@@ -150,7 +150,7 @@ window.jQuery(document).ready($=>{
             success: resp => {
                 const {editor_id} = resp.data;
                 if(!resp.success) {
-                    tutor_toast('Error!', get_response_message(resp), 'error');
+                    tutor_toast(__('Error!', 'tutor'), get_response_message(resp), 'error');
                     return;
                 }
 
@@ -173,6 +173,25 @@ window.jQuery(document).ready($=>{
                     // Reinitialize new added question/reply editor.
                     tinymce.execCommand('mceRemoveEditor', false, editor_id);
                     tinymce.execCommand('mceAddEditor', false, editor_id);
+
+                    // Highlight code snippets
+                    $('.tutor-qna-single-question pre').each(function () {
+                        let el = $(this),
+                            fallback = 'javascript',
+                            lang = el.attr('class').trim().replace('language-', '') || fallback,
+                            highlighted = null;
+                
+                        if (Prism) {
+                            try {
+                                highlighted = Prism.highlight(el.text(), Prism.languages[lang], lang);
+                            } catch (error) {
+                                highlighted = Prism.highlight(el.text(), Prism.languages[fallback], fallback);
+                            }
+                
+                            highlighted ? el.html(highlighted) : null
+                        }
+                    });
+
                 } else {
                     // Clear question & reply textarea.
                     if ($(".tutor-quesanswer-askquestion textarea")) {

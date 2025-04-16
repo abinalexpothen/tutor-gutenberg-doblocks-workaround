@@ -12,24 +12,7 @@ function enableSaveButton() {
     }
 }
 
-function handleTinyMceChange() {
-        const searchParams = new URLSearchParams(window.location.search);
-        if (typeof (tinyMCE) != "undefined") {
-            if (searchParams.get('tab_page') === 'email_notification') {
-                if (!tinyMCE.activeEditor) {
-                    const tmceVisualBtn = document.getElementById('editor_field_email_footer_text-tmce');
-                    tmceVisualBtn.click();
-                }
-                tinyMCE.activeEditor.on("change", function (e) {
-                    enableSaveButton();
-                });
-            }
-        }
-}
-
 readyState_complete(() => {
-    handleTinyMceChange();
-
     const loadNavItem = document.querySelector('[tutor-option-tabs] li > a.is-active');
     if (null !== loadNavItem) {
         document.title = loadNavItem.querySelector('[tutor-option-label]').innerText + ' < ' + _tutorobject.site_title;
@@ -76,9 +59,17 @@ readyState_complete(() => {
                     document.getElementById(dataTab).querySelector('.loading-spinner').remove();
                 }
 
-                // enable if tinymce content changed
-                handleTinyMceChange();
-            
+                // Update certificate pagination on tab change
+                if (dataTab === 'tutor_certificate') {
+                    const paginationLinks = document.querySelectorAll('#tutor-settings-tab-certificate_list .tutor-pagination a');
+
+                    paginationLinks.forEach((link) => {
+                        const url = new URL(link.href);
+                        url.searchParams.set('tab_page', dataTab); // Update the 'tab_page' parameter
+                        link.href = url.toString();
+                    });
+                }
+
             }
 
         });

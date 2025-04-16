@@ -66,29 +66,29 @@ class Withdraw_Requests_List {
 		$pending  = self::tabs_data( 'pending', $date, $search );
 		$rejected = self::tabs_data( 'rejected', $date, $search );
 
-		$url  = get_pagenum_link();
+		$url  = apply_filters( 'tutor_data_tab_base_url', get_pagenum_link() );
 		$tabs = array(
 			array(
 				'key'   => 'all',
-				'title' => __( 'All', 'tutor-pro' ),
+				'title' => __( 'All', 'tutor' ),
 				'value' => $approved + $pending + $rejected,
 				'url'   => $url . '&data=all',
 			),
 			array(
 				'key'   => 'approved',
-				'title' => __( 'Approved', 'tutor-pro' ),
+				'title' => __( 'Approved', 'tutor' ),
 				'value' => $approved,
 				'url'   => $url . '&data=approved',
 			),
 			array(
 				'key'   => 'pending',
-				'title' => __( 'Pending', 'tutor-pro' ),
+				'title' => __( 'Pending', 'tutor' ),
 				'value' => $pending,
 				'url'   => $url . '&data=pending',
 			),
 			array(
 				'key'   => 'rejected',
-				'title' => __( 'Rejected', 'tutor-pro' ),
+				'title' => __( 'Rejected', 'tutor' ),
 				'value' => $rejected,
 				'url'   => $url . '&data=rejected',
 			),
@@ -151,6 +151,12 @@ class Withdraw_Requests_List {
 	 */
 	public function update_withdraw_status() {
 		tutor_utils()->checking_nonce();
+
+		// Check if user is privileged.
+		if ( ! current_user_can( 'administrator' ) ) {
+			wp_send_json_error( tutor_utils()->error_message() );
+		}
+
 		$status         = Input::post( 'action-type', '' );
 		$withdraw_id    = Input::post( 'withdraw-id', '' );
 		$reject_type    = Input::post( 'reject-type', '' );

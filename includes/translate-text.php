@@ -68,6 +68,10 @@ function tutor_get_translate_text() {
 			'badge' => 'success',
 			'text'  => __( 'Completed', 'tutor' ),
 		),
+		'incomplete'  => array(
+			'badge' => 'default',
+			'text'  => __( 'Incomplete', 'tutor' ),
+		),
 		'processing' => array(
 			'badge' => 'warning',
 			'text'  => __( 'Processing', 'tutor' ),
@@ -80,6 +84,10 @@ function tutor_get_translate_text() {
 			'badge' => 'danger',
 			'text'  => __( 'Cancelled', 'tutor' ),
 		),
+		'expired'    => array(
+			'badge' => 'danger',
+			'text'  => __( 'Expired', 'tutor' ),
+		),
 		'blocked'    => array(
 			'badge' => 'danger',
 			'text'  => __( 'Blocked', 'tutor' ),
@@ -87,6 +95,10 @@ function tutor_get_translate_text() {
 		'cancel'     => array(
 			'badge' => 'danger',
 			'text'  => __( 'Cancelled', 'tutor' ),
+		),
+		'hold' => array(
+			'badge' => 'warning',
+			'text'  => __( 'On Hold', 'tutor' ),
 		),
 		'on-hold'    => array(
 			'badge' => 'warning',
@@ -100,9 +112,29 @@ function tutor_get_translate_text() {
 			'badge' => 'warning',
 			'text'  => __( 'On Hold', 'tutor' ),
 		),
-		'publish'    => array(
+		'partially-refunded' => array(
+			'badge' => 'default',
+			'text'  => __( 'Partially Refunded', 'tutor' ),
+		),
+		'refunded' => array(
+			'badge' => 'danger',
+			'text'  => __( 'Refunded', 'tutor' ),
+		),
+		'unpaid' => array(
+			'badge' => 'warning',
+			'text'  => __( 'Unpaid', 'tutor' ),
+		),
+		'paid' => array(
 			'badge' => 'success',
-			'text'  => __( 'Publish', 'tutor' ),
+			'text'  => __( 'Paid', 'tutor' ),
+		),
+		'failed' => array(
+			'badge' => 'danger',
+			'text'  => __( 'Failed', 'tutor' ),
+		),
+		'partially-paid'    => array(
+			'badge' => 'success',
+			'text'  => __( 'Partially Paid', 'tutor' ),
 		),
 		'trash'      => array(
 			'badge' => 'danger',
@@ -116,11 +148,43 @@ function tutor_get_translate_text() {
 			'badge' => 'warning',
 			'text'  => __( 'Private', 'tutor' ),
 		),
+		'active'    => array(
+			'badge' => 'success',
+			'text'  => __( 'Active', 'tutor' ),
+		),
+		'inactive'    => array(
+			'badge' => 'default',
+			'text'  => __( 'Inactive', 'tutor' ),
+		),
 		'true'       => array(
 			'text' => _x( 'True', 'true/false question options', 'tutor' ),
 		),
 		'false'      => array(
 			'text' => _x( 'False', 'true/false question options', 'tutor' ),
+		),
+		'days'  => array(
+			'text' => __( 'Days', 'tutor' ),
+		),
+		'day'  => array(
+			'text' => __( 'Day', 'tutor' ),
+		),
+		'hours'  => array(
+			'text' => __( 'Hours', 'tutor' ),
+		),
+		'hour'  => array(
+			'text' => __( 'Hour', 'tutor' ),
+		),
+		'minutes'  => array(
+			'text' => __( 'Minutes', 'tutor' ),
+		),
+		'minute'  => array(
+			'text' => __( 'Minute', 'tutor' ),
+		),
+		'seconds'  => array(
+			'text' => __( 'Seconds', 'tutor' ),
+		),
+		'second'  => array(
+			'text' => __( 'Second', 'tutor' ),
 		),
 
 		// Translate able week name.
@@ -181,6 +245,42 @@ function tutor_get_translate_text() {
 			'text' => _x( 'November', 'Month name', 'tutor' ),
 		),
 		'december'   => array(
+			'text' => _x( 'December', 'Month name', 'tutor' ),
+		),
+		'jan'    => array(
+			'text' => _x( 'January', 'Month name', 'tutor' ),
+		),
+		'feb'   => array(
+			'text' => _x( 'February', 'Month name', 'tutor' ),
+		),
+		'mar'      => array(
+			'text' => _x( 'March', 'Month name', 'tutor' ),
+		),
+		'apr'      => array(
+			'text' => _x( 'April', 'Month name', 'tutor' ),
+		),
+		'may'        => array(
+			'text' => _x( 'May', 'Month name', 'tutor' ),
+		),
+		'jun'       => array(
+			'text' => _x( 'June', 'Month name', 'tutor' ),
+		),
+		'jul'       => array(
+			'text' => _x( 'July', 'Month name', 'tutor' ),
+		),
+		'aug'     => array(
+			'text' => _x( 'August', 'Month name', 'tutor' ),
+		),
+		'sep'  => array(
+			'text' => _x( 'September', 'Month name', 'tutor' ),
+		),
+		'oct'    => array(
+			'text' => _x( 'October', 'Month name', 'tutor' ),
+		),
+		'nov'   => array(
+			'text' => _x( 'November', 'Month name', 'tutor' ),
+		),
+		'dec'   => array(
 			'text' => _x( 'December', 'Month name', 'tutor' ),
 		),
 	);

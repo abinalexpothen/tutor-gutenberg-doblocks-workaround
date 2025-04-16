@@ -80,7 +80,16 @@ do_action( 'tutor_quiz/single/before/top' );
 				<div class="tutor-quiz-info">
 					<span class="tutor-fs-6 tutor-color-muted"><?php esc_html_e( 'Quiz Time', 'tutor' ); ?>:</span>
 					<span class="tutor-fs-6 tutor-color-black">
-					<?php echo esc_html( $time_limit . ' ' . sprintf( __( '%s', 'tutor' ), isset( $available_time_type[ $time_type ] ) ? $available_time_type[ $time_type ] : $time_type ) ); //phpcs:ignore ?>
+					<?php
+						echo esc_html(
+							sprintf(
+								/* translators: %d: count, %s: time unit. */
+								__( '%1$s %2$s', 'tutor' ),
+								$time_limit,
+								isset( $available_time_type[ $time_type ] ) ? $available_time_type[ $time_type ] : $time_type
+							)
+						);
+					?>
 					</span>
 				</div>
 			<?php endif; ?>
@@ -103,7 +112,7 @@ do_action( 'tutor_quiz/single/before/top' );
 				</div>
 			<?php endif; ?>
 		</div>
-		
+
 		<?php
 		if ( $attempt_remaining > 0 || 0 == $attempts_allowed ) :
 			do_action( 'tutor_quiz/start_form/before', $quiz_id );

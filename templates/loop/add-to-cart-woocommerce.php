@@ -13,6 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+$course_id  = get_the_ID();
 $product_id = tutor_utils()->get_course_product_id();
 $product    = wc_get_product( $product_id );
 
@@ -25,11 +26,11 @@ if ( ! $product_id || ! $product ) {
  *
  * @since 1.5.5
  */
-$isLoggedIn               = is_user_logged_in();
+$is_logged_in             = is_user_logged_in();
 $enable_guest_course_cart = tutor_utils()->get_option( 'enable_guest_course_cart' );
 $required_loggedin_class  = '';
 $ajax_add_to_cart_class   = '';
-if ( ! $isLoggedIn && ! $enable_guest_course_cart ) {
+if ( ! $is_logged_in && ! $enable_guest_course_cart ) {
 	$required_loggedin_class = apply_filters( 'tutor_enroll_required_login_class', 'tutor-open-login-modal' );
 } else {
 	$ajax_add_to_cart_class = $product->supports( 'ajax_add_to_cart' ) ? 'ajax_add_to_cart' : '';
@@ -82,6 +83,7 @@ if ( isset( $args['attributes']['aria-label'] ) ) {
 				),
 				$product,
 				$args
-			)
+			),
+			$course_id
 		);
 

@@ -54,7 +54,7 @@
 			box-sizing: border-box;
 			box-shadow: 0px 10px 14px rgba(0, 0, 0, 0.12);
 			border-radius: 6px;
-			z-index: 1;
+			z-index: 9;
 			transition: 200ms ease-out;
 			opacity: 0;
 			visibility: hidden;
@@ -147,11 +147,17 @@
 		box-sizing: border-box;
 		box-shadow: 0px 6px 20px rgba(28, 49, 104, 0.1);
 		border-radius: 6px;
+		min-width: 350px;
+		display: flex;
 
-		width: 350px;
+		&__custom-wrapper {
+			width: 100%;
+		}
 
 		&__month-container {
 			float: unset;
+			width: 100%;
+			min-width: 348px;
 		}
 
 		&__header {
@@ -245,16 +251,15 @@
 			padding-bottom: 20px;
 		}
 
-		&__input-time-container {
+		&__time-container {
 			float: unset;
 			width: unset;
+			border-left: 1px solid #c0c3cb;
 
-			display: block;
-			margin: 0;
-			padding: 16px 20px;
-
-			/* color/black/fill/08 */
-			border-top: 1px solid #e3e6eb;
+			.rtl & {
+				border-left: 0;
+				border-right: 1px solid #c0c3cb;
+			}
 
 			.react-datepicker-time {
 				&__input {
@@ -301,6 +306,15 @@
 					display: none;
 				}
 			} // end .react-datepicker-time
+		}
+
+		&__time-list {
+			height: calc(276px + (1.7rem / 2))!important;
+		}
+
+		&__time-list-item {
+			height: 40px!important;
+			padding: 11px 10px!important;
 		}
 	} //end .react-datepicker
 }

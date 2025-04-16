@@ -10,6 +10,7 @@
 
 namespace TUTOR;
 
+use Tutor\Helpers\QueryHelper;
 use Tutor\Models\CourseModel;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -62,13 +63,13 @@ class Course_List {
 		 *
 		 * @since v2.0.0
 		 */
-		add_action( 'wp_ajax_tutor_change_course_status', array( __CLASS__, 'tutor_change_course_status' ) );
+		add_action( 'wp_ajax_tutor_change_course_status', array( $this, 'tutor_change_course_status' ) );
 		/**
 		 * Handle ajax request for delete course
 		 *
 		 * @since v2.0.0
 		 */
-		add_action( 'wp_ajax_tutor_course_delete', array( __CLASS__, 'tutor_course_delete' ) );
+		add_action( 'wp_ajax_tutor_course_delete', array( $this, 'tutor_course_delete' ) );
 	}
 
 	/**
@@ -93,6 +94,18 @@ class Course_List {
 		if ( 'trash' !== $active_tab ) {
 			array_push( $actions, $this->bulk_action_trash() );
 		}
+
+		if ( ! current_user_can( 'administrator' ) ) {
+			$can_trash_post = tutor_utils()->get_option( 'instructor_can_delete_course' ) && current_user_can( 'edit_tutor_course' );
+			if ( ! $can_trash_post ) {
+				$actions = array_filter(
+					$actions,
+					function ( $val ) {
+						return 'trash' !== $val['value'];
+					}
+				);
+			}
+		}
 		return apply_filters( 'tutor_course_bulk_actions', $actions );
 	}
 
@@ -109,7 +122,7 @@ class Course_List {
 	 * @since v2.0.0
 	 */
 	public function tabs_key_value( $category_slug, $course_id, $date, $search ): array {
-		$url = get_pagenum_link();
+		$url = apply_filters( 'tutor_data_tab_base_url', get_pagenum_link() );
 
 		$all       = self::count_course( 'all', $category_slug, $course_id, $date, $search );
 		$mine      = self::count_course( 'mine', $category_slug, $course_id, $date, $search );
@@ -117,6 +130,8 @@ class Course_List {
 		$draft     = self::count_course( 'draft', $category_slug, $course_id, $date, $search );
 		$pending   = self::count_course( 'pending', $category_slug, $course_id, $date, $search );
 		$trash     = self::count_course( 'trash', $category_slug, $course_id, $date, $search );
+		$private   = self::count_course( 'private', $category_slug, $course_id, $date, $search );
+		$future    = self::count_course( 'future', $category_slug, $course_id, $date, $search );
 
 		$tabs = array(
 			array(
@@ -150,12 +165,27 @@ class Course_List {
 				'url'   => $url . '&data=pending',
 			),
 			array(
+				'key'   => 'future',
+				'title' => __( 'Scheduled', 'tutor' ),
+				'value' => $future,
+				'url'   => $url . '&data=future',
+			),
+			array(
+				'key'   => 'private',
+				'title' => __( 'Private', 'tutor' ),
+				'value' => $private,
+				'url'   => $url . '&data=private',
+			),
+			array(
 				'key'   => 'trash',
 				'title' => __( 'Trash', 'tutor' ),
 				'value' => $trash,
 				'url'   => $url . '&data=trash',
 			),
 		);
+		if ( ! tutor_utils()->get_option( 'instructor_can_delete_course' ) && ! current_user_can( 'administrator' ) ) {
+			unset( $tabs[7] );
+		}
 		return apply_filters( 'tutor_course_tabs', $tabs );
 	}
 
@@ -186,7 +216,7 @@ class Course_List {
 		);
 
 		if ( 'all' === $status || 'mine' === $status ) {
-			$args['post_status'] = array( 'publish', 'pending', 'draft', 'private' );
+			$args['post_status'] = array( 'publish', 'pending', 'draft', 'private', 'future' );
 		} else {
 			$args['post_status'] = array( $status );
 		}
@@ -226,14 +256,14 @@ class Course_List {
 		if ( '' !== $category_slug ) {
 			$args['tax_query'] = array(
 				array(
-					'taxonomy' => 'course-category',
+					'taxonomy' => CourseModel::COURSE_CATEGORY,
 					'field'    => 'slug',
 					'terms'    => $category_slug,
 				),
 			);
 		}
 
-		$the_query = new \WP_Query( $args );
+		$the_query = self::course_list_query( $args, $user_id, $status );
 
 		return ! is_null( $the_query ) && isset( $the_query->found_posts ) ? $the_query->found_posts : $the_query;
 
@@ -251,6 +281,19 @@ class Course_List {
 
 		$action   = Input::post( 'bulk-action', '' );
 		$bulk_ids = Input::post( 'bulk-ids', '' );
+
+		// Check if user is privileged.
+		if ( ! current_user_can( 'administrator' ) ) {
+			if ( current_user_can( 'edit_tutor_course' ) ) {
+				$can_publish_course = tutor_utils()->get_option( 'instructor_can_publish_course' );
+
+				if ( 'publish' === $action && ! $can_publish_course ) {
+					wp_send_json_error( tutor_utils()->error_message() );
+				}
+			} else {
+				wp_send_json_error( tutor_utils()->error_message() );
+			}
+		}
 
 		if ( '' === $action || '' === $bulk_ids ) {
 			wp_send_json_error( array( 'message' => __( 'Please select appropriate action', 'tutor' ) ) );
@@ -280,12 +323,7 @@ class Course_List {
 
 		do_action( 'after_tutor_course_bulk_action_update', $action, $bulk_ids );
 
-		$update_status ? wp_send_json_success() : wp_send_json_error(
-			array(
-				'message' => 'Could not update course status',
-				'tutor',
-			)
-		);
+		$update_status ? wp_send_json_success() : wp_send_json_error( array( 'message' => __( 'Could not update course status', 'tutor' ) ) );
 
 		exit;
 	}
@@ -298,15 +336,54 @@ class Course_List {
 	 */
 	public static function tutor_change_course_status() {
 		tutor_utils()->checking_nonce();
+
 		$status = Input::post( 'status' );
 		$id     = Input::post( 'id' );
+		$course = get_post( $id );
+
+		// Check if user is privileged.
+		if ( ! current_user_can( 'administrator' ) ) {
+
+			if ( ! tutor_utils()->can_user_edit_course( get_current_user_id(), $course->ID ) ) {
+				wp_send_json_error( tutor_utils()->error_message() );
+			}
+
+			$can_delete_course  = tutor_utils()->get_option( 'instructor_can_delete_course' );
+			$can_publish_course = tutor_utils()->get_option( 'instructor_can_publish_course' );
+
+			if ( 'publish' === $status && ! $can_publish_course ) {
+				wp_send_json_error( tutor_utils()->error_message() );
+			}
+
+			if ( 'trash' === $status && $can_delete_course ) {
+				$args       = array(
+					'ID'          => $id,
+					'post_status' => $status,
+				);
+				$trash_post = wp_update_post( $args );
+
+				if ( $trash_post ) {
+					wp_send_json_success( __( 'Course trashed successfully', 'tutor' ) );
+				}
+			}
+		}
+
+		if ( CourseModel::POST_TYPE !== $course->post_type ) {
+			wp_send_json_error( tutor_utils()->error_message() );
+		}
 
 		$args = array(
 			'ID'          => $id,
 			'post_status' => $status,
 		);
-		wp_update_post( $args );
 
+		if ( CourseModel::STATUS_FUTURE === $course->post_status && CourseModel::STATUS_PUBLISH === $status ) {
+			$args['post_status']   = CourseModel::STATUS_PUBLISH;
+			$args['post_date']     = current_time( 'mysql' );
+			$args['post_date_gmt'] = current_time( 'mysql', 1 );
+		}
+
+		wp_update_post( $args );
 		wp_send_json_success();
 		exit;
 	}
@@ -314,16 +391,29 @@ class Course_List {
 	/**
 	 * Handle ajax request for deleting course
 	 *
-	 * @return json response
 	 * @since 2.0.0
+	 *
+	 * @return void JSON response
 	 */
 	public static function tutor_course_delete() {
 		tutor_utils()->checking_nonce();
 
-		$id     = Input::post( 'id', 0, Input::TYPE_INT );
-		$delete = CourseModel::delete_course( $id );
+		$user_id   = get_current_user_id();
+		$course_id = Input::post( 'id', 0, Input::TYPE_INT );
 
-		return wp_send_json( $delete );
+		// Check if user is privileged.
+		if ( ! tutor_utils()->can_user_edit_course( $user_id, $course_id ) ) {
+			wp_send_json_error( tutor_utils()->error_message() );
+		}
+
+		$delete = CourseModel::delete_course( $course_id );
+
+		if ( $delete ) {
+			wp_send_json_success( __( 'Course has been deleted ', 'tutor' ) );
+		} else {
+			wp_send_json_error( __( 'Course delete failed ', 'tutor' ) );
+		}
+
 		exit;
 	}
 
@@ -360,9 +450,12 @@ class Course_List {
 		$status     = sanitize_text_field( $status );
 		$bulk_ids   = sanitize_text_field( $bulk_ids );
 
+		$ids       = array_map( 'intval', explode( ',', $bulk_ids ) );
+		$in_clause = QueryHelper::prepare_in_clause( $ids );
+
 		$update = $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$post_table} SET post_status = %s WHERE ID IN ($bulk_ids)", //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"UPDATE {$post_table} SET post_status = %s WHERE ID IN ($in_clause)", //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$status
 			)
 		);
@@ -426,5 +519,22 @@ class Course_List {
 	public static function is_public( int $course_id ): bool {
 		$is_public = get_post_meta( $course_id, '_tutor_is_public_course', true );
 		return 'yes' === $is_public ? true : false;
+	}
+
+	/**
+	 * Query for obtaining course list.
+	 *
+	 * @since 3.4.0
+	 *
+	 * @param array  $args the query args.
+	 * @param int    $user_id the user id.
+	 * @param string $status the post status.
+	 *
+	 * @return \WP_Query
+	 */
+	public static function course_list_query( $args, $user_id, $status ) {
+
+		$course_list_query = new \WP_Query( apply_filters( 'tutor_admin_course_list', $args, $user_id, $status ) );
+		return $course_list_query;
 	}
 }

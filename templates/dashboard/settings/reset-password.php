@@ -11,6 +11,8 @@
 
 ?>
 
+<div class="tutor-fs-4 tutor-fw-medium tutor-mb-24"><?php esc_html_e( 'Settings', 'tutor' ); ?></div>
+
 <div class="tutor-dashboard-content-inner">
 	<div class="tutor-mb-32">
 		<?php
@@ -47,7 +49,7 @@
 						</div>
 					</div>
 
-					<div class="tutor-passowrd-strength-hint">
+					<div class="tutor-password-strength-hint">
 						<div class="indicator">
 							<span class="weak"></span>
 							<span class="medium"></span>

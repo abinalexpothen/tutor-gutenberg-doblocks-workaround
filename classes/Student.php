@@ -38,7 +38,7 @@ class Student {
 	public function __construct() {
 		add_action( 'template_redirect', array( $this, 'register_student' ) );
 		add_filter( 'get_avatar_url', array( $this, 'filter_avatar' ), 10, 3 );
-		add_action( 'tutor_action_tutor_social_profile', array( $this, 'tutor_social_profile' ) );
+		add_action( 'wp_ajax_tutor_social_profile', array( $this, 'tutor_social_profile' ) );
 		add_action( 'wp_ajax_tutor_profile_password_reset', array( $this, 'tutor_reset_password' ) );
 		add_action( 'wp_ajax_tutor_update_profile', array( $this, 'update_profile' ) );
 	}
@@ -113,17 +113,41 @@ class Student {
 			'user_pass'  => $password,
 		);
 
-		$user_id = wp_insert_user( $userdata );
-		if ( ! is_wp_error( $user_id ) ) {
-			$user = get_user_by( 'id', $user_id );
-			if ( $user ) {
-				wp_set_current_user( $user_id, $user->user_login );
-				wp_set_auth_cookie( $user_id );
+		global $wpdb;
+		$wpdb->query( 'START TRANSACTION' );
+
+		$user_id        = wp_insert_user( $userdata );
+		$enroll_attempt = Input::post( 'tutor_course_enroll_attempt', '' );
+
+		if ( is_wp_error( $user_id ) ) {
+			$this->error_msgs = $user_id->get_error_messages();
+			add_filter( 'tutor_student_register_validation_errors', array( $this, 'tutor_student_form_validation_errors' ) );
+			return;
+		}
+
+		$user = get_user_by( 'id', $user_id );
+
+		$is_req_email_verification = apply_filters( 'tutor_require_email_verification', false );
+		if ( $is_req_email_verification ) {
+			do_action( 'tutor_send_verification_mail', $user, $enroll_attempt );
+			$reg_done = apply_filters( 'tutor_registration_done', true );
+			if ( ! $reg_done ) {
+				$wpdb->query( 'ROLLBACK' );
+				return;
+			} else {
+				$wpdb->query( 'COMMIT' );
 			}
+		} else {
+			/**
+			 * Tutor Free - reqular student reg process.
+			 */
+			$wpdb->query( 'COMMIT' );
+
+			wp_set_current_user( $user_id, $user->user_login );
+			wp_set_auth_cookie( $user_id );
 
 			do_action( 'tutor_after_student_signup', $user_id );
 			// since 1.9.8 do enroll if guest attempt to enroll.
-			$enroll_attempt = Input::post( 'tutor_course_enroll_attempt', '' );
 			if ( ! empty( $enroll_attempt ) ) {
 				do_action( 'tutor_do_enroll_after_login_if_attempt', $enroll_attempt, $user_id );
 			}
@@ -135,10 +159,6 @@ class Student {
 			}
 			wp_safe_redirect( apply_filters( 'tutor_student_register_redirect_url', $redirect_page, $user ) );
 			die();
-		} else {
-			$this->error_msgs = $user_id->get_error_messages();
-			add_filter( 'tutor_student_register_validation_errors', array( $this, 'tutor_student_form_validation_errors' ) );
-			return;
 		}
 
 		$registration_page = tutor_utils()->student_register_url();
@@ -174,8 +194,9 @@ class Student {
 		$first_name              = sanitize_text_field( tutor_utils()->input_old( 'first_name' ) );
 		$last_name               = sanitize_text_field( tutor_utils()->input_old( 'last_name' ) );
 		$phone_number            = sanitize_text_field( tutor_utils()->input_old( 'phone_number' ) );
-		$tutor_profile_bio       = wp_kses_post( tutor_utils()->input_old( 'tutor_profile_bio' ) );
+		$tutor_profile_bio       = wp_kses( Input::post( 'tutor_profile_bio', '', Input::TYPE_KSES_POST ), tutor_utils()->allowed_profile_bio_tags() );
 		$tutor_profile_job_title = sanitize_text_field( tutor_utils()->input_old( 'tutor_profile_job_title' ) );
+		$timezone                = Input::post( 'timezone', '' );
 
 		$display_name = sanitize_text_field( tutor_utils()->input_old( 'display_name' ) );
 
@@ -185,23 +206,16 @@ class Student {
 			'last_name'    => $last_name,
 			'display_name' => $display_name,
 		);
-		$user_id  = wp_update_user( $userdata );
+
+		$user_id = wp_update_user( $userdata );
 
 		if ( ! is_wp_error( $user_id ) ) {
-			update_user_meta( $user_id, 'phone_number', $phone_number );
-			update_user_meta( $user_id, '_tutor_profile_bio', $tutor_profile_bio );
-			update_user_meta( $user_id, '_tutor_profile_job_title', $tutor_profile_job_title );
-
-			$tutor_user_social = tutor_utils()->tutor_user_social_icons();
-			foreach ( $tutor_user_social as $key => $social ) {
-				$user_social_value = sanitize_text_field( tutor_utils()->input_old( $key ) );
-				if ( $user_social_value ) {
-					update_user_meta( $user_id, $key, $user_social_value );
-				} else {
-					delete_user_meta( $user_id, $key );
-				}
-			}
+			update_user_meta( $user_id, User::PHONE_NUMBER_META, $phone_number );
+			update_user_meta( $user_id, User::PROFILE_BIO_META, $tutor_profile_bio );
+			update_user_meta( $user_id, User::PROFILE_JOB_TITLE_META, $tutor_profile_job_title );
+			update_user_meta( $user_id, User::TIMEZONE_META, $timezone );
 		}
+
 		do_action( 'tutor_profile_update_after', $user_id );
 
 		wp_send_json_success( array( 'message' => __( 'Profile Updated', 'tutor' ) ) );
@@ -316,7 +330,8 @@ class Student {
 				delete_user_meta( $user_id, $key );
 			}
 		}
-		wp_safe_redirect( wp_get_raw_referer() );
+
+		wp_send_json_success( array( 'message' => __( 'Social Profile Updated', 'tutor' ) ) );
 		die();
 	}
 }

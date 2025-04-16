@@ -65,21 +65,26 @@ class Rewrite_Rules extends Tutor_Base {
 	 * Tutor rewrite rules
 	 *
 	 * @since 1.0.0
+	 * @since 2.5.0     Param typecast added.
+	 *                  Dynamic course permalink support added.
 	 *
-	 * @param string $wp_rewrite get the rewrite rule.
+	 * @param \WP_Rewrite $wp_rewrite get the rewrite rule.
 	 *
 	 * @return void
 	 */
-	public function add_rewrite_rules( $wp_rewrite ) {
+	public function add_rewrite_rules( \WP_Rewrite $wp_rewrite ) {
 		$new_rules = array(
 			// Lesson Permalink.
-			$this->course_post_type . "/(.+?)/{$this->lesson_base_permalink}/(.+?)/?$" => "index.php?post_type={$this->lesson_post_type}&name=" . $wp_rewrite->preg_index( 2 ),
+			$this->course_base_permalink . "/(.+?)/{$this->lesson_base_permalink}/(.+?)/?$" => "index.php?post_type={$this->lesson_post_type}&name=" . $wp_rewrite->preg_index( 2 ),
 			// Quiz Permalink.
-			$this->course_post_type . '/(.+?)/tutor_quiz/(.+?)/?$' => 'index.php?post_type=tutor_quiz&name=' . $wp_rewrite->preg_index( 2 ),
+			$this->course_base_permalink . "/(.+?)/{$this->quiz_base_permalink}/(.+?)/?$" => 'index.php?post_type=tutor_quiz&name=' . $wp_rewrite->preg_index( 2 ),
 			// Assignments URL.
-			$this->course_post_type . '/(.+?)/assignments/(.+?)/?$' => 'index.php?post_type=tutor_assignments&name=' . $wp_rewrite->preg_index( 2 ),
-			// Zoom Meeting.
-			$this->course_post_type . '/(.+?)/zoom-meeting/(.+?)/?$' => 'index.php?post_type=tutor_zoom_meeting&name=' . $wp_rewrite->preg_index( 2 ),
+			$this->course_base_permalink . "/(.+?)/{$this->assignment_base_permalink}/(.+?)/?$" => 'index.php?post_type=tutor_assignments&name=' . $wp_rewrite->preg_index( 2 ),
+
+			// Zoom Lessons.
+			$this->course_base_permalink . '/(.+?)/zoom-lessons/(.+?)/?$' => 'index.php?post_type=tutor_zoom_meeting&name=' . $wp_rewrite->preg_index( 2 ),
+			// Meet Lessons.
+			$this->course_base_permalink . '/(.+?)/meet-lessons/(.+?)/?$' => 'index.php?post_type=tutor-google-meet&name=' . $wp_rewrite->preg_index( 2 ),
 
 			// Private Video URL.
 			'video-url/(.+?)/?$' => "index.php?post_type={$this->lesson_post_type}&lesson_video=true&name=" . $wp_rewrite->preg_index( 1 ),
@@ -112,10 +117,7 @@ class Rewrite_Rules extends Tutor_Base {
 	 * @return string
 	 */
 	public function change_lesson_single_url( $post_link, $id = 0 ) {
-		$post = get_post( $id );
-
-		global $wpdb;
-
+		$post             = get_post( $id );
 		$course_base_slug = 'sample-course';
 
 		if ( is_object( $post ) && $post->post_type == $this->lesson_post_type ) {
@@ -123,31 +125,31 @@ class Rewrite_Rules extends Tutor_Base {
 			$course_id = tutor_utils()->get_course_id_by( 'lesson', $post->ID );
 
 			if ( $course_id ) {
-				$course = $wpdb->get_row( $wpdb->prepare( "SELECT post_name from {$wpdb->posts} where ID = %d ", $course_id ) );
+				$course = get_post( $course_id );
 				if ( $course ) {
 					$course_base_slug = $course->post_name;
 				}
-				return home_url( "/{$this->course_post_type}/{$course_base_slug}/{$this->lesson_base_permalink}/" . $post->post_name . '/' );
+				return home_url( "/{$this->course_base_permalink}/{$course_base_slug}/{$this->lesson_base_permalink}/" . $post->post_name . '/' );
 			} else {
-				return home_url( "/{$this->course_post_type}/sample-course/{$this->lesson_base_permalink}/" . $post->post_name . '/' );
+				return home_url( "/{$this->course_base_permalink}/sample-course/{$this->lesson_base_permalink}/" . $post->post_name . '/' );
 			}
 		} elseif ( is_object( $post ) && 'tutor_quiz' === $post->post_type ) {
 			// Quiz Permalink.
-			$course = $wpdb->get_row( $wpdb->prepare( "SELECT ID, post_name, post_type, post_parent from {$wpdb->posts} where ID = %d ", $post->post_parent ) );
+			$course = get_post( $post->post_parent );
 			if ( $course ) {
 				// Checking if this topic.
 				if ( $course->post_type !== $this->course_post_type ) {
-					$course = $wpdb->get_row( $wpdb->prepare( "SELECT ID, post_name, post_type, post_parent from {$wpdb->posts} where ID = %d ", $course->post_parent ) );
+					$course = get_post( $course->post_parent );
 				}
 				// Checking if this lesson.
 				if ( isset( $course->post_type ) && $course->post_type !== $this->course_post_type ) {
-					$course = $wpdb->get_row( $wpdb->prepare( "SELECT ID, post_name, post_type, post_parent from {$wpdb->posts} where ID = %d ", $course->post_parent ) );
+					$course = get_post( $course->post_parent );
 				}
 
 				$course_post_name = isset( $course->post_name ) ? $course->post_name : 'sample-course';
-				return home_url( "/{$this->course_post_type}/{$course_post_name}/tutor_quiz/{$post->post_name}/" );
+				return home_url( "/{$this->course_base_permalink}/{$course_post_name}/{$this->quiz_base_permalink}/{$post->post_name}/" );
 			} else {
-				return home_url( "/{$this->course_post_type}/sample-course/tutor_quiz/{$post->post_name}/" );
+				return home_url( "/{$this->course_base_permalink}/sample-course/{$this->quiz_base_permalink}/{$post->post_name}/" );
 			}
 		}
 		return $post_link;

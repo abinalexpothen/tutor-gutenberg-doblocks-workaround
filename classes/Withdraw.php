@@ -112,6 +112,12 @@ class Withdraw {
 			),
 		);
 
+		$saved_options              = (array) get_option( 'tutor_option', array() );
+		$withdrawal_payment_methods = $saved_options['tutor_withdrawal_methods'] ?? array();
+		foreach ( $methods as $key => $method ) {
+			$methods[ $key ]['enabled'] = in_array( $key, $withdrawal_payment_methods, true );
+		}
+
 		return apply_filters( 'tutor_withdraw_methods', $methods );
 	}
 
@@ -232,6 +238,19 @@ class Withdraw {
 		$earning_summary = WithdrawModel::get_withdraw_summary( $user_id );
 		$min_withdraw    = tutor_utils()->get_option( 'min_withdraw_amount' );
 
+		if ( ( $earning_summary->total_pending + $withdraw_amount ) > $earning_summary->available_for_withdraw ) {
+			wp_send_json_error(
+				array(
+					'msg' => wp_sprintf(
+						/* translators: 1: total pending withdraw request 2: available for withdraw */
+						__( "You have total %1\$s pending withdraw request. You can't make more than %2\$s withdraw request at a time", 'tutor' ),
+						$earning_summary->total_pending,
+						$earning_summary->available_for_withdraw
+					),
+				)
+			);
+		}
+
 		$saved_withdraw_account        = WithdrawModel::get_user_withdraw_method();
 		$formatted_min_withdraw_amount = tutor_utils()->tutor_price( $min_withdraw );
 
@@ -241,6 +260,7 @@ class Withdraw {
 		}
 
 		if ( ( ! is_numeric( $withdraw_amount ) && ! is_float( $withdraw_amount ) ) || $withdraw_amount < $min_withdraw ) {
+			/* translators: 1: strong tag start 2: min withdrawal amount 3: strong tag end */
 			$required_min_withdraw = apply_filters( 'tutor_required_min_amount_msg', sprintf( __( 'Minimum withdrawal amount is %1$s %2$s %3$s ', 'tutor' ), '<strong>', $formatted_min_withdraw_amount, '</strong>' ) );
 			wp_send_json_error( array( 'msg' => $required_min_withdraw ) );
 		}

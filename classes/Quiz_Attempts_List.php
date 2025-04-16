@@ -89,94 +89,106 @@ class Quiz_Attempts_List {
 	public function get_quiz_attempts_stat() {
 		global $wpdb;
 
-		$user_id = get_current_user_id();
-		// Set query based on action tab.
-		$pass_mark     = "(((SUBSTRING_INDEX(SUBSTRING_INDEX(quiz_attempts.attempt_info, '\"passing_grade\";s:2:\"', -1), '\"', 1))/100)*quiz_attempts.total_marks)";
-		$pending_count = "(SELECT COUNT(DISTINCT attempt_answer_id) FROM {$wpdb->prefix}tutor_quiz_attempt_answers WHERE quiz_attempt_id=quiz_attempts.attempt_id AND is_correct IS NULL)";
+		if ( wp_doing_ajax() ) {
+			tutor_utils()->checking_nonce();
+		}
 
-		$pass_clause = " AND quiz_attempts.earned_marks >= {$pass_mark}  ";
+		/**
+		 * Parse `passing_grade` value from `attempt_info` serialized data.
+		 *
+		 * Data Format     : "passing_grade";s:2:"80" or "passing_grade";s:3:"100"
+		 * Expected Output : 80 or 100
+		 *
+		 * TODO: Optimize SQL query.
+		 */
+		$pass_mark = "((( SUBSTRING_INDEX(
+			SUBSTRING_INDEX(
+			  attempt_info,
+			  CONCAT(
+				  '\"passing_grade\";s:',
+				  SUBSTRING_INDEX(SUBSTRING_INDEX(attempt_info, '\"passing_grade\";s:', -1), ':\"', 1),
+				  ':\"'
+			  ),
+			  -1
+			), 
+			'\"', 
+			1
+  		))/100) * quiz_attempts.total_marks)";
 
-		$fail_clause = " AND quiz_attempts.earned_marks < {$pass_mark} ";
-
+		$pending_count  = "(SELECT COUNT(DISTINCT attempt_answer_id) FROM {$wpdb->prefix}tutor_quiz_attempt_answers WHERE quiz_attempt_id=quiz_attempts.attempt_id AND is_correct IS NULL)";
+		$pass_clause    = " AND quiz_attempts.earned_marks >= {$pass_mark}  ";
+		$fail_clause    = " AND quiz_attempts.earned_marks < {$pass_mark} AND {$pending_count} < 1 ";
 		$pending_clause = " AND {$pending_count} > 0 ";
 
+		$user_id     = get_current_user_id();
 		$user_clause = '';
 		if ( ! current_user_can( 'administrator' ) ) {
 			$user_clause = "AND quiz.post_author = {$user_id}";
 		}
 
-		$count          = array();
+		$count_obj = (object) array(
+			'pass'    => 0,
+			'fail'    => 0,
+			'pending' => 0,
+		);
+
 		$is_ajax_action = 'tutor_quiz_attempts_count' === Input::post( 'action' );
+
 		if ( $is_ajax_action ) {
 			$attempt_cache = new QuizAttempts();
 
-			if ( $attempt_cache->has_cache() ) {
-				$count = $attempt_cache->get_cache();
+			if ( $attempt_cache->has_cache() && ! is_null( $attempt_cache->get_cache()->pass ) ) {
+				$count_obj = $attempt_cache->get_cache();
 			} else {
-				// TODO: need to fix prepare violation.
-				$count               = $wpdb->get_col(
+				$select_stmt = "SELECT COUNT( DISTINCT attempt_id)
+								FROM {$wpdb->prefix}tutor_quiz_attempts quiz_attempts
+								INNER JOIN {$wpdb->posts} quiz ON quiz_attempts.quiz_id = quiz.ID
+								-- INNER JOIN {$wpdb->prefix}tutor_quiz_attempt_answers AS ans ON quiz_attempts.attempt_id = ans.quiz_attempt_id";
+
+				$count_obj->pass = (int) $wpdb->get_var(
 					$wpdb->prepare(
-						"SELECT COUNT( DISTINCT attempt_id)
-							FROM 	{$wpdb->prefix}tutor_quiz_attempts quiz_attempts
-									INNER JOIN {$wpdb->posts} quiz
-										ON quiz_attempts.quiz_id = quiz.ID
-									INNER JOIN {$wpdb->prefix}tutor_quiz_attempt_answers AS ans 
-										ON quiz_attempts.attempt_id = ans.quiz_attempt_id		
-		
-							WHERE 	attempt_status != %s
-								{$pass_clause}
-								{$user_clause}
-		
-							UNION 
-		
-							SELECT COUNT( DISTINCT attempt_id)
-								FROM 	{$wpdb->prefix}tutor_quiz_attempts quiz_attempts
-										INNER JOIN {$wpdb->posts} quiz
-											ON quiz_attempts.quiz_id = quiz.ID
-										INNER JOIN {$wpdb->prefix}tutor_quiz_attempt_answers AS ans 
-											ON quiz_attempts.attempt_id = ans.quiz_attempt_id		
-		
-								WHERE 	attempt_status != %s
-									{$fail_clause}
-									{$user_clause}
-		
-							UNION
-		
-							SELECT COUNT( DISTINCT attempt_id)
-								FROM 	{$wpdb->prefix}tutor_quiz_attempts quiz_attempts
-										INNER JOIN {$wpdb->posts} quiz
-											ON quiz_attempts.quiz_id = quiz.ID
-										INNER JOIN {$wpdb->prefix}tutor_quiz_attempt_answers AS ans 
-											ON quiz_attempts.attempt_id = ans.quiz_attempt_id		
-		
-								WHERE 	attempt_status != %s
-									{$pending_clause}
-									{$user_clause}
-		
-					",
-						'attempt_started',
-						'attempt_started',
+						"{$select_stmt}		
+						WHERE attempt_status != %s
+							{$pass_clause}
+							{$user_clause}
+							",
 						'attempt_started'
 					)
 				);
-				$attempt_cache->data = array(
-					$count[0] ?? 0, // Pass.
-					$count[1] ?? 0, // Fail.
-					$count[2] ?? 0, // Pending.
+
+				$count_obj->fail = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"{$select_stmt}		
+						WHERE attempt_status != %s
+							{$fail_clause}
+							{$user_clause}
+							",
+						'attempt_started'
+					)
 				);
+
+				$count_obj->pending = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"{$select_stmt}		
+						WHERE attempt_status != %s
+							{$pending_clause}
+							{$user_clause}
+							",
+						'attempt_started'
+					)
+				);
+
+				$attempt_cache->data = $count_obj;
 				$attempt_cache->set_cache();
 			}
 		}
-
-		$count_pass    = $count[0] ?? 0;
-		$count_fail    = $count[1] ?? 0;
-		$count_pending = $count[2] ?? 0;
-
-		$all      = $count_pass + $count_fail + $count_pending;
-		$pass     = $count_pass;
-		$fail     = $count_fail;
-		$pending  = $count_pending;
+		
+		$all      = $count_obj->pass + $count_obj->fail + $count_obj->pending;
+		$pass     = $count_obj->pass;
+		$fail     = $count_obj->fail;
+		$pending  = $count_obj->pending;
 		$response = compact( 'all', 'pass', 'fail', 'pending' );
+
 		return $is_ajax_action ? wp_send_json_success( $response ) : $response;
 	}
 
@@ -193,7 +205,7 @@ class Quiz_Attempts_List {
 	 * @return array
 	 */
 	public function tabs_key_value( $user_id, $course_id, $date, $search ): array {
-		$url   = get_pagenum_link();
+		$url   = apply_filters( 'tutor_data_tab_base_url', get_pagenum_link());
 		$stats = $this->get_quiz_attempts_stat();
 
 		$tabs = array(
@@ -253,6 +265,11 @@ class Quiz_Attempts_List {
 		// check nonce.
 		tutor_utils()->checking_nonce();
 
+		// Check if user is privileged.
+		if ( ! User::has_any_role( array( User::ADMIN, User::INSTRUCTOR ) ) ) {
+			wp_send_json_error( tutor_utils()->error_message() );
+		}
+
 		$bulk_action = Input::post( 'bulk-action', '' );
 		$bulk_ids    = Input::post( 'bulk-ids', '' );
 		$bulk_ids    = explode( ',', $bulk_ids );
@@ -261,6 +278,17 @@ class Quiz_Attempts_List {
 				return (int) trim( $id );
 			},
 			$bulk_ids
+		);
+
+		// prevent instructor to remove quiz attempt from admin.
+		$bulk_ids = array_filter(
+			$bulk_ids,
+			function ( $attempt_id ) {
+				$attempt   = tutor_utils()->get_attempt( $attempt_id );
+				$user_id   = get_current_user_id();
+				$course_id = $attempt && is_object( $attempt ) ? $attempt->course_id : 0;
+				return $course_id && tutor_utils()->can_user_edit_course( $user_id, $course_id );
+			}
 		);
 
 		switch ( $bulk_action ) {

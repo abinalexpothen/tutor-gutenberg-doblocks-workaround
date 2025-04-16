@@ -34,6 +34,20 @@ if ( Input::has( 'course_id' ) ) {
 	return;
 }
 
+/**
+ * Global $is_enrolled, $course_rating get null for third party
+ * who only include this file without single-course.php file.
+ * 
+ * @since 2.1.9
+ */
+if ( is_null( $is_enrolled ) ) {
+	$is_enrolled = tutor_utils()->is_enrolled( $course_id, $current_user_id );
+}
+
+if ( is_null( $course_rating ) ) {
+	$course_rating = tutor_utils()->get_course_rating( $course_id );
+}
+
 do_action( 'tutor_course/single/enrolled/before/reviews' );
 ?>
 
@@ -92,7 +106,12 @@ do_action( 'tutor_course/single/enrolled/before/reviews' );
 									</div>
 
 									<div class="tutor-col-4 tutor-col-lg-3">
-										<span class="tutor-fs-6 tutor-color-secondary tutor-individual-star-rating"><?php printf( esc_html( _n( '%s Rating', '%s Ratings', 0 == $value ? 1 : $value, 'tutor' ) ), number_format_i18n( $value ) ); ?></span>
+										<span class="tutor-fs-6 tutor-color-secondary tutor-individual-star-rating">
+											<?php
+												/* translators: %s: rating count */
+												printf( esc_html( _n( '%s Rating', '%s Ratings', 0 == $value ? 1 : $value, 'tutor' ) ), number_format_i18n( $value ) ); 
+											?>
+										</span>
 									</div>
 								</div>
 							<?php endforeach; ?>

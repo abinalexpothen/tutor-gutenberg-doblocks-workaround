@@ -1,4 +1,4 @@
-@import '../../../v2-library/_src/scss/reusables.scss';
+@import '../../../v2-library/src/scss/reusables.scss';
 .tutor-dashboard {
 	// Libraries to use in all frontend dashboard pages
 	@import './lib/phone-number-field.scss';
@@ -26,10 +26,6 @@
 				margin-top: 28px;
 			}
 		}
-		
-		.tutor-capitalize-text {
-			text-transform: capitalize;
-		}
 
 		@import './pages/quiz-attempt.scss';
 		@import './pages/setting.scss';
@@ -39,3 +35,4 @@
 		@import '../modules/certificate-list.scss';
 	}
 }
+@import './snackbar';

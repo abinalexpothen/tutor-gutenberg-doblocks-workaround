@@ -1,23 +1,11 @@
-@import '../../../v2-library/_src/scss/reusables.scss';
-@import './registration-notce.scss';
+@import '../../../v2-library/src/scss/reusables.scss';
 @import './tutor-admin.scss';
+@import './whats-new.scss';
 @import './v2/admin-v2-markup.scss';
-@import './v2/dashborad-custom.scss';
-@import './segments/withdraw';
+@import './segments/withdraw.scss';
+@import './segments/registration-notice.scss';
 @import '../modules/qna.scss';
 @import '../modules/quiz-attempts.scss';
 @import '../front/select_dd_search';
 @import '../modules/certificate-list.scss';
 @import '../modules/quiz-icons.scss';
-
-table.tutor-table.tutor-table-with-checkbox {
-	.td-checkbox input[type='checkbox'] {
-		margin: 0;
-	}
-}
-// Hide empty text link from dashboard menu.
-#adminmenu {
-	& li a[href=tutor-setup] {
-		display: none;
-	}
-}

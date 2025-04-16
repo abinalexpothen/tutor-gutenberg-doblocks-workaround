@@ -10,6 +10,8 @@
 
 namespace TUTOR;
 
+use Tutor\Helpers\QueryHelper;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -79,9 +81,22 @@ class Announcements {
 	public function announcement_bulk_action() {
 		tutor_utils()->checking_nonce();
 
+		// Check if user is privileged.
+		if ( ! User::has_any_role( array( User::ADMIN, User::INSTRUCTOR ) ) ) {
+			wp_send_json_error( tutor_utils()->error_message() );
+		}
+
 		$action   = Input::post( 'bulk-action', '' );
 		$bulk_ids = Input::post( 'bulk-ids', '' );
-		$update   = self::delete_announcements( $action, $bulk_ids );
+
+		// prevent instructor to delete admin announcement.
+		$bulk_ids = array_filter(
+			explode( ',', $bulk_ids ),
+			function ( $announcement_id ) {
+				return tutor_utils()->can_user_manage( 'announcement', $announcement_id );
+			}
+		);
+		$update   = self::delete_announcements( $action, implode( ',', $bulk_ids ) );
 		return true === $update ? wp_send_json_success() : wp_send_json_error();
 	}
 
@@ -91,17 +106,20 @@ class Announcements {
 	 * @since 2.0.0
 	 *
 	 * @param string $action hold action.
-	 * @param string $bulk_ids ids that need to update.
+	 * @param string $bulk_ids comma seperated ids.
 	 *
 	 * @return bool
 	 */
 	public static function delete_announcements( $action, $bulk_ids ): bool {
-		global $wpdb;
-		$post_table = $wpdb->posts;
+		$ids       = array_map( 'intval', explode( ',', $bulk_ids ) );
+		$in_clause = QueryHelper::prepare_in_clause( $ids );
+
 		if ( 'delete' === $action ) {
-			$delete = $wpdb->query(
+			global $wpdb;
+			$post_table = $wpdb->posts;
+			$delete     = $wpdb->query(
 				$wpdb->prepare(
-					"DELETE FROM {$post_table} WHERE ID IN ($bulk_ids)" //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					"DELETE FROM {$post_table} WHERE ID IN ($in_clause)" //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				)
 			);
 			return false === $delete ? false : true;

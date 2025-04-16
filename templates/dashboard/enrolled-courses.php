@@ -46,7 +46,7 @@ $paginated_courses_list = $full_courses_list_array[ $active_tab ];
 
 ?>
 
-<div class="tutor-fs-5 tutor-fw-medium tutor-color-black tutor-mb-16 tutor-capitalize-text"><?php echo esc_html( $page_tabs[ $active_tab ] ); ?></div>
+<div class="tutor-fs-5 tutor-fw-medium tutor-color-black tutor-mb-16 tutor-text-capitalize"><?php echo esc_html( $page_tabs[ $active_tab ] ); ?></div>
 <div class="tutor-dashboard-content-inner enrolled-courses">
 	<div class="tutor-mb-32">
 		<ul class="tutor-nav" tutor-priority-nav>
@@ -66,7 +66,7 @@ $paginated_courses_list = $full_courses_list_array[ $active_tab ];
 			<?php endforeach; ?>
 
 			<li class="tutor-nav-item tutor-nav-more tutor-d-none">
-				<a class="tutor-nav-link tutor-nav-more-item" href="#"><span class="tutor-mr-4"><?php esc_html_e( 'More', 'tutor-pro' ); ?></span> <span class="tutor-nav-more-icon tutor-icon-times"></span></a>
+				<a class="tutor-nav-link tutor-nav-more-item" href="#"><span class="tutor-mr-4"><?php esc_html_e( 'More', 'tutor' ); ?></span> <span class="tutor-nav-more-icon tutor-icon-times"></span></a>
 				<ul class="tutor-nav-more-list tutor-dropdown"></ul>
 			</li>
 		</ul>

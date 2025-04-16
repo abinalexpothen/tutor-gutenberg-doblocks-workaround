@@ -10,6 +10,8 @@
 
 namespace TUTOR;
 
+use Tutor\Models\CourseModel;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -31,9 +33,31 @@ class Frontend {
 		add_action( 'after_setup_theme', array( $this, 'remove_admin_bar' ) );
 		add_filter( 'nav_menu_link_attributes', array( $this, 'add_menu_atts' ), 10, 3 );
 		add_action( 'admin_init', array( $this, 'restrict_wp_admin_area' ) );
+		add_action( 'tutor_before_course_builder_load', array( $this, 'restrict_wp_admin_area' ) );
 
 		// Handle flash toast message for redirect_to util helper.
 		add_action( 'wp_head', array( new Utils(), 'handle_flash_message' ), 999 );
+
+		add_action( 'tutor_course/single/before/wrap', array( $this, 'do_auto_course_complete' ) );
+	}
+
+	/**
+	 * Do auto course complete on course details page.
+	 *
+	 * @return void
+	 */
+	public function do_auto_course_complete() {
+		if ( ! is_user_logged_in() ) {
+			return;
+		}
+
+		$course_id = get_the_ID();
+		$user_id   = get_current_user_id();
+
+		if ( CourseModel::can_autocomplete_course( $course_id, $user_id ) ) {
+			CourseModel::mark_course_as_completed( $course_id, $user_id );
+			Course::set_review_popup_data( $user_id, $course_id );
+		}
 	}
 
 	/**
@@ -79,7 +103,7 @@ class Frontend {
 		$hide_admin_bar_for_users = (bool) get_tutor_option( 'hide_admin_bar_for_users' );
 		$has_access               = $this->has_admin_area_access();
 
-		if ( tutor()->has_pro && $hide_admin_bar_for_users && ! $has_access && ! wp_doing_ajax() ) {
+		if ( is_admin() && tutor()->has_pro && $hide_admin_bar_for_users && ! $has_access && ! wp_doing_ajax() ) {
 			wp_die( esc_html__( 'Access Denied!', 'tutor' ) );
 		}
 	}

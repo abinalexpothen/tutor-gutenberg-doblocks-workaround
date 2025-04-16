@@ -9,6 +9,8 @@
  * @since 1.0.0
  */
 
+use TUTOR\User;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -45,7 +47,7 @@ if ( $best_watch_time > 0 ) {
 	$json_data['best_watch_time'] = $best_watch_time;
 }
 
-$is_comment_enabled = tutor_utils()->get_option( 'enable_comment_for_lesson' ) && comments_open();
+$is_comment_enabled = tutor_utils()->get_option( 'enable_comment_for_lesson' ) && comments_open() && is_user_logged_in();
 
 ?>
 
@@ -68,7 +70,16 @@ tutor_load_template(
 		$source_key = is_object( $video_info ) && 'html5' !== $video_info->source ? 'source_' . $video_info->source : null;
 		$has_source = ( is_object( $video_info ) && $video_info->source_video_id ) || ( isset( $source_key ) ? $video_info->$source_key : null );
 	?>
-	<?php if ( $has_source ) : ?>
+	<?php
+	if ( $has_source ) :
+		$completion_mode                              = tutor_utils()->get_option( 'course_completion_process' );
+		$json_data['strict_mode']                     = ( 'strict' === $completion_mode );
+		$json_data['control_video_lesson_completion'] = (bool) tutor_utils()->get_option( 'control_video_lesson_completion', false );
+		$json_data['required_percentage']             = (int) tutor_utils()->get_option( 'required_percentage_to_complete_video_lesson', 80 );
+		$json_data['video_duration']                  = $video_info->duration_sec ?? 0;
+		$json_data['lesson_completed']                = tutor_utils()->is_completed_lesson( $content_id, get_current_user_id() ) !== false;
+		$json_data['is_enrolled']                     = tutor_utils()->is_enrolled( $course_id, get_current_user_id() ) !== false;
+		?>
 		<input type="hidden" id="tutor_video_tracking_information" value="<?php echo esc_attr( json_encode( $json_data ) ); ?>">
 	<?php endif; ?>
 	<div class="tutor-video-player-wrapper">
@@ -77,13 +88,24 @@ tutor_load_template(
 
 	<?php
 	$referer_url        = wp_get_referer();
-	$referer_comment_id = explode( '#', filter_input( INPUT_SERVER, 'REQUEST_URI' ) );
+	$referer_comment_id = explode( '#', filter_input( INPUT_SERVER, 'REQUEST_URI' ) ?? '' );
 	$url_components     = parse_url( $referer_url );
 	$page_tab           = \TUTOR\Input::get( 'page_tab', 'overview' );
 
 	isset( $url_components['query'] ) ? parse_str( $url_components['query'], $output ) : null;
 
-	$has_lesson_content    = ! in_array( trim( get_the_content() ), array( null, '', '&nbsp;' ) );
+	/**
+	 * If lesson has no content, lesson tab will be hidden.
+	 * To enable elementor and SCORM, only admin can see lesson tab.
+	 *
+	 * @since 2.2.2
+	 */
+	$has_lesson_content = apply_filters(
+		'tutor_has_lesson_content',
+		User::is_admin() || ! in_array( trim( get_the_content() ), array( null, '', '&nbsp;' ), true ),
+		$course_content_id
+	);
+
 	$has_lesson_attachment = count( tutor_utils()->get_attachments() ) > 0;
 	$has_lesson_comment    = (int) get_comments_number( $course_content_id );
 	?>
@@ -139,6 +161,7 @@ tutor_load_template(
 							<div class="tutor-fs-5 tutor-fw-medium tutor-color-black tutor-mb-12">
 								<?php esc_html_e( 'About Lesson', 'tutor' ); ?>
 							</div>
+							<?php do_action( 'tutor_lesson_before_the_content', $post, $course_id ); ?>
 							<div class="tutor-fs-6 tutor-color-secondary tutor-lesson-wrapper">
 								<?php the_content(); ?>
 							</div>

@@ -63,6 +63,7 @@ window.jQuery(document).ready($=>{
 						// Else if 'auto_abandon' or anything else for now
 						// Add Disable state button class and disable then
 						$('.tutor-quiz-answer-next-btn, .tutor-quiz-submit-btn, .tutor-quiz-answer-previous-btn').prop('disabled', true);
+						$("button[name='quiz_answer_submit_btn']").prop('disabled',true);
 
 						// add alert text
 						$('.time-remaining span').css('color', '#F44337');
@@ -106,6 +107,9 @@ window.jQuery(document).ready($=>{
 									$(`${alertDiv} .tutor-quiz-alert-text`).html(
 										`${__('Unfortunately, you are out of time and quiz attempts. ', 'tutor')}`
 									);
+									
+									// No attempt is remaining, so reload the page.
+									window.location.reload(true)
 								}
 							},
 							complete: function() {},

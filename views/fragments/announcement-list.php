@@ -53,7 +53,7 @@ function tutor_announcement_modal( $id, $title, $courses, $announcement = null )
 						<label class="tutor-form-label">
 							<?php esc_html_e( 'Select Course', 'tutor' ); ?>
 						</label>
-						<select class="tutor-form-select" name="tutor_announcement_course" required>
+						<select class="tutor-form-select" name="tutor_announcement_course" required data-searchable>
 							<?php if ( $courses ) : ?>
 								<?php foreach ( $courses as $course ) : ?>
 									<option value="<?php echo esc_attr( $course->ID ); ?>" <?php selected( $course_id, $course->ID ); ?>>
@@ -242,7 +242,7 @@ $courses = ( current_user_can( 'administrator' ) ) ? CourseModel::get_courses() 
 						</div>
 					</th>
 					<th width="17%">
-						<?php esc_html_e( 'Date', 'tutor-pro' ); ?>
+						<?php esc_html_e( 'Date', 'tutor' ); ?>
 					</th>
 				<?php else : ?>
 					<th width="17%">
@@ -350,28 +350,32 @@ $courses = ( current_user_can( 'administrator' ) ) ? CourseModel::get_courses() 
 			<?php endif; ?>
 		</tbody>
 	</table>
-</div>
 
-<div class="tutor-pagination-wrapper <?php echo esc_attr( is_admin() ? 'tutor-mt-20' : 'tutor-mt-40' ); ?>">
-	<?php
+	<div class="tutor-pagination-wrapper <?php echo esc_attr( is_admin() ? 'tutor-mt-20' : 'tutor-mt-40' ); ?>">
+		<?php
 		$limit = tutor_utils()->get_option( 'pagination_per_page' );
-	if ( $the_query->found_posts > $limit ) {
-		$pagination_data = array(
-			'total_items' => $the_query->found_posts,
-			'per_page'    => $limit,
-			'paged'       => $paged,
-		);
+		if ( $the_query->found_posts > $limit ) {
+			$pagination_data = array(
+				'total_items' => $the_query->found_posts,
+				'per_page'    => $limit,
+				'paged'       => $paged,
+			);
 
-		$pagination_template = tutor()->path . 'views/elements/pagination.php';
-		if ( is_admin() ) {
-			tutor_load_template_from_custom_path( $pagination_template, $pagination_data );
-		} else {
-			$pagination_template_frontend = tutor()->path . 'templates/dashboard/elements/pagination.php';
-			tutor_load_template_from_custom_path( $pagination_template_frontend, $pagination_data );
+			$pagination_template = tutor()->path . 'views/elements/pagination.php';
+			if ( is_admin() ) {
+				tutor_load_template_from_custom_path( $pagination_template, $pagination_data );
+			} else {
+				$pagination_template_frontend = tutor()->path . 'templates/dashboard/elements/pagination.php';
+				tutor_load_template_from_custom_path( $pagination_template_frontend, $pagination_data );
+			}
 		}
-	}
-	?>
+		?>
+	</div>
+	<!-- end pagination -->
 </div>
+<!-- end table responsive -->
+
+
 <?php
-	tutor_announcement_modal( 'tutor_announcement_new', __( 'Create Announcement' ), $courses );
+	tutor_announcement_modal( 'tutor_announcement_new', __( 'Create Announcement', 'tutor' ), $courses );
 ?>

@@ -10,6 +10,9 @@
 
 namespace TUTOR;
 
+use Tutor\Cache\TutorCache;
+use Tutor\Models\CourseModel;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -19,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @since 1.0.0
  */
-class Private_Course_Access {
+class Private_Course_Access extends Tutor_Base {
 
 	/**
 	 * Allow empty
@@ -34,7 +37,10 @@ class Private_Course_Access {
 	 * @since 1.0.0
 	 */
 	public function __construct() {
+		parent::__construct();
+
 		add_action( 'pre_get_posts', array( $this, 'enable_private_access' ) );
+		add_filter( 'post_type_link', array( $this, 'permalink_for_private_course' ), 10, 2 );
 	}
 
 	/**
@@ -60,19 +66,27 @@ class Private_Course_Access {
 			// Get using raw query to speed up.
 			$course_post_type = tutor()->course_post_type;
 
-			$private_query = $wpdb->prepare(
-				"SELECT ID, post_parent
-                    FROM {$wpdb->posts}
-                    WHERE post_type = %s
-                        AND post_name = %s
-                        AND post_status = %s
-                ",
-				$course_post_type,
-				$p_name,
-				'private'
-			);
+			// Get data from cache.
+			$cache_key = "tutor_private_query_{$course_post_type}_{$p_name}";
+			$result    = TutorCache::get( $cache_key );
 
-			$result = $wpdb->get_results( $private_query ); //phpcs:ignore
+			if ( false === $result ) {
+				$private_query = $wpdb->prepare(
+					"SELECT ID, post_parent
+						FROM {$wpdb->posts}
+						WHERE post_type = %s
+							AND post_name = %s
+							AND post_status = %s
+					",
+					$course_post_type,
+					$p_name,
+					'private'
+				);
+				$result = $wpdb->get_results( $private_query ); //phpcs:ignore
+				// Set cache data.
+				TutorCache::set( $cache_key, $result );
+			}
+
 			$private_course_id = ( is_array( $result ) && isset( $result[0] ) ) ? $result[0]->ID : 0;
 
 			if ( $private_course_id > 0 && tutor_utils()->is_enrolled( $private_course_id ) ) {
@@ -80,5 +94,23 @@ class Private_Course_Access {
 				$query->set( 'post_status', array( 'private', 'publish' ) );
 			}
 		}
+	}
+
+	/**
+	 * Make permalink for private course.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param string  $url permalink.
+	 * @param WP_Post $post post object.
+	 *
+	 * @return string
+	 */
+	public function permalink_for_private_course( $url, $post ) {
+		if ( CourseModel::STATUS_PRIVATE === $post->post_status && $this->course_post_type === $post->post_type ) {
+			$url = home_url( $this->course_base_permalink . '/' . $post->post_name );
+		}
+
+		return $url;
 	}
 }

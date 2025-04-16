@@ -37,7 +37,7 @@ tutor_alert(
 				</div>
 			</div>
 			<div class="tutor-option-field-input">
-				<button class="tutor-btn tutor-btn-outline-primary tutor-btn-sm" id="export_settings"><?php esc_html_e( 'Export Settings', 'tutor' ); ?></button>
+				<button class="tutor-btn tutor-btn-outline-primary tutor-btn-sm" id="tutor_export_settings"><?php esc_html_e( 'Export Settings', 'tutor' ); ?></button>
 			</div>
 		</div>
 	</div>
@@ -47,23 +47,27 @@ tutor_alert(
 	<div class="tutor-option-group-title tutor-mb-16">
 		<div class="tutor-fs-6 tutor-color-muted"><?php esc_html_e( 'Import Settings', 'tutor' ); ?></div>
 	</div>
-	<!-- @todo: fix the upload button -->
 	<div class="item-wrapper">
 		<div class="tutor-option-field-row tutor-d-block">
-			<div class="tutor-option-field-label">
+			<div>
 				<div class="drag-drop-zone">
 					<span class="tutor-icon-upload tutor-fs-1 tutor-color-primary"></span>
 					<div class="title"><?php esc_html_e( 'Drag &amp; Drop your JSON File here', 'tutor' ); ?> </div>
 					<div class="subtitle"><span><?php esc_html_e( 'File Format', 'tutor' ); ?>:</span> .json <br> <?php esc_html_e( 'Or', 'tutor' ); ?></div>
-					<label for="drag-drop-input" class="tutor-btn tutor-btn-primary tutor-btn-sm">
+					<label for="drag-drop-input" class="tutor-btn tutor-btn-secondary tutor-btn-sm tutor-mt-8">
 						<input type="file" name="drag-drop-input" id="drag-drop-input" class="tutor-d-none">
-						<span><?php esc_html_e( 'Browse File', 'tutor' ); ?></span>
+						<span><?php esc_html_e( 'Choose From Computer', 'tutor' ); ?></span>
 					</label>
 					<span class="file-info"></span>
 				</div>
 			</div>
 			<div class="tutor-option-field-input tutor-mt-16">
-				<button class="tutor-btn tutor-btn-primary tutor-btn-md tutor_import_options" data-tutor-modal-target="tutor-modal-bulk-action" data-btntext="<?php esc_attr_e( 'Yes, Import Settings', 'tutor' ); ?>" data-heading="<?php esc_attr_e( 'Import from Previous Settings?', 'tutor' ); ?>" data-message="<?php esc_attr_e( 'WARNING! This will overwrite all existing settings, please proceed with caution.', 'tutor' ); ?>" id="import_options"><?php esc_html_e( 'Update Settings', 'tutor' ); ?></button>
+				<button class="tutor-btn tutor-btn-primary tutor-btn-md tutor_import_options" 
+						data-tutor-modal-target="tutor-modal-bulk-action" 
+						data-btntext="<?php esc_attr_e( 'Yes, Import Settings', 'tutor' ); ?>" 
+						data-heading="<?php esc_attr_e( 'Import from Previous Settings?', 'tutor' ); ?>" 
+						data-message="<?php esc_attr_e( 'WARNING! This will overwrite all existing settings, please proceed with caution.', 'tutor' ); ?>" 
+						id="tutor_import_options"><?php esc_html_e( 'Update Settings', 'tutor' ); ?></button>
 			</div>
 		</div>
 	</div>
@@ -79,16 +83,19 @@ tutor_alert(
 				<?php esc_attr_e( 'Date', 'tutor' ); ?>
 			</div>
 		</div>
-		<?php if ( $tutor_options = get_option( 'tutor_settings_log', array() ) ) : ?>
+		<?php
+		$tutor_options = get_option( 'tutor_settings_log', array() );
+		if ( $tutor_options ) :
+			?>
 			<?php
 			foreach ( $tutor_options as $key => $option_data ) :
-				$datetypeClass = 'saved' == $option_data['datatype'] ? ' label-primary' : ' label-refund';
+				$datetype_class = 'saved' === $option_data['datatype'] ? ' label-primary' : ' label-default';
 				?>
 				<div class="tutor-option-field-row">
 					<div class="tutor-option-field-label">
 						<div class="tutor-fs-7 tutor-fw-medium">
 							<?php echo esc_html( $option_data['history_date'] ); ?>
-							<span class="tutor-badge-label tutor-ml-16<?php echo esc_attr( $datetypeClass ); ?>"> <?php echo esc_html( ucwords( $option_data['datatype'] ) ); ?></span>
+							<span class="tutor-badge-label tutor-ml-16<?php echo esc_attr( $datetype_class ); ?>"> <?php echo esc_html( ucwords( $option_data['datatype'] ) ); ?></span>
 						</div>
 					</div>
 					<div class="tutor-option-field-input">
@@ -138,7 +145,12 @@ tutor_alert(
 				</div>
 			</div>
 			<div class="tutor-option-field-input">
-				<button class="tutor-btn tutor-btn-outline-primary tutor-btn-sm tutor-reset-all" data-tutor-modal-target="tutor-modal-bulk-action" data-btntext="<?php esc_attr_e( 'Yes, Reset Settings', 'tutor' ); ?>" data-heading="<?php esc_attr_e( 'Reset All Settings?', 'tutor' ); ?>" data-message="<?php esc_attr_e( 'WARNING! This will reset all settings to default, please proceed with caution.', 'tutor' ); ?>" id="reset_options"><?php esc_html_e( 'Reset All Settings', 'tutor' ); ?></button>
+				<button class="tutor-btn tutor-btn-outline-primary tutor-btn-sm tutor-reset-all" 
+						data-tutor-modal-target="tutor-modal-bulk-action" 
+						data-btntext="<?php esc_attr_e( 'Yes, Reset Settings', 'tutor' ); ?>" 
+						data-heading="<?php esc_attr_e( 'Reset All Settings?', 'tutor' ); ?>" 
+						data-message="<?php esc_attr_e( 'WARNING! This will reset all settings to default, please proceed with caution.', 'tutor' ); ?>" 
+						id="tutor_reset_options"><?php esc_html_e( 'Reset All Settings', 'tutor' ); ?></button>
 			</div>
 		</div>
 	</div>

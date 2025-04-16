@@ -17,6 +17,9 @@ $col_classes = array(
 	3 => 'tutor-col-12 tutor-col-lg-4',
 );
 ?>
+
+<div class="tutor-fs-4 tutor-fw-medium tutor-mb-24"><?php esc_html_e( 'Settings', 'tutor' ); ?></div>
+
 <div class="tutor-dashboard-setting-withdraw tutor-dashboard-content-inner">
 	<div class="tutor-mb-32">
 		<?php
@@ -41,8 +44,8 @@ $col_classes = array(
 				foreach ( $tutor_withdrawal_methods as $method_id => $method ) {
 					?>
 					<div class="<?php echo esc_attr( $col_classes[ $method_count ] ); ?>" data-withdraw-method="<?php echo esc_attr( $method_id ); ?>">
-						<label class="tutor-radio-select tutor-align-center tutor-mb-12">
-							<input class="tutor-form-check-input" type="radio" name="tutor_selected_withdraw_method" value="<?php echo esc_attr( $method_id ); ?>" <?php checked( $method_id, $old_method_key ); ?>/>
+						<label  class="tutor-radio-select tutor-align-center tutor-mb-12">
+							<input data-test='bank-transfer-radio-selector' class="tutor-form-check-input" type="radio" name="tutor_selected_withdraw_method" value="<?php echo esc_attr( $method_id ); ?>" <?php checked( $method_id, $old_method_key ); ?>/>
 							<div class="tutor-radio-select-content">
 								<span class="tutor-radio-select-title">
 									<?php echo esc_html( tutor_utils()->avalue_dot( 'method_name', $method ) ); ?>
@@ -148,6 +151,14 @@ $col_classes = array(
 			}
 
 				do_action( 'tutor_withdraw_set_account_form_after' );
+		} else {
+			?>
+			<div class="tutor-row tutor-mb-32">
+				<p>
+					<?php echo __( 'There\'s no Withdrawal method selected yet! To select a Withdraw method, please contact the Site Admin.', 'tutor' ); ?>
+				</p>
+			</div>
+			<?php
 		}
 		?>
 	</form>

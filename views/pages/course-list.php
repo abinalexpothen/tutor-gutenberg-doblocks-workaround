@@ -12,8 +12,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-use TUTOR\Input;
 use TUTOR\Course_List;
+use TUTOR\Input;
+use Tutor\Models\CourseModel;
 
 $courses = \TUTOR\Tutor::instance()->course_list;
 
@@ -41,14 +42,15 @@ $offset       = ( $limit * $paged_filter ) - $limit;
 /**
  * Navbar data to make nav menu
  */
-$add_course_url = esc_url( admin_url( 'post-new.php?post_type=' . tutor()->course_post_type ) );
+$add_course_url = esc_url( admin_url( 'admin.php?page=create-course' ) );
 $navbar_data    = array(
 	'page_title'   => $courses->page_title,
 	'tabs'         => $courses->tabs_key_value( $category_slug, $course_id, $date, $search_filter ),
 	'active'       => $active_tab,
 	'add_button'   => true,
 	'button_title' => __( 'Add New', 'tutor' ),
-	'button_url'   => $add_course_url,
+	'button_url'   => '#',
+	'button_class' => 'tutor-create-new-course',
 );
 
 /**
@@ -73,8 +75,9 @@ $args = array(
 );
 
 if ( 'all' === $active_tab || 'mine' === $active_tab ) {
-	$args['post_status'] = array( 'publish', 'pending', 'draft', 'private' );
+	$args['post_status'] = array( 'publish', 'pending', 'draft', 'private', 'future' );
 } else {
+	//phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 	$status              = 'published' === $active_tab ? 'publish' : $active_tab;
 	$args['post_status'] = array( $status );
 }
@@ -84,9 +87,10 @@ if ( 'mine' === $active_tab ) {
 }
 $date_filter = sanitize_text_field( tutor_utils()->array_get( 'date', $_GET, '' ) );
 
-$year  = date( 'Y', strtotime( $date_filter ) );
-$month = date( 'm', strtotime( $date_filter ) );
-$day   = date( 'd', strtotime( $date_filter ) );
+//phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+$year  = gmdate( 'Y', strtotime( $date_filter ) );
+$month = gmdate( 'm', strtotime( $date_filter ) );
+$day   = gmdate( 'd', strtotime( $date_filter ) );
 // Add date query.
 if ( '' !== $date_filter ) {
 	$args['date_query'] = array(
@@ -113,7 +117,7 @@ if ( '' !== $search_filter ) {
 if ( '' !== $category_slug ) {
 	$args['tax_query'] = array(
 		array(
-			'taxonomy' => 'course-category',
+			'taxonomy' => CourseModel::COURSE_CATEGORY,
 			'field'    => 'slug',
 			'terms'    => $category_slug,
 		),
@@ -122,7 +126,7 @@ if ( '' !== $category_slug ) {
 
 add_filter( 'posts_search', '_tutor_search_by_title_only', 500, 2 );
 
-$the_query = new WP_Query( $args );
+$the_query = Course_List::course_list_query( $args, get_current_user_id(), $active_tab );
 
 remove_filter( 'posts_search', '_tutor_search_by_title_only', 500 );
 
@@ -134,6 +138,19 @@ $available_status = array(
 	'private' => array( __( 'Private', 'tutor' ), 'select-default' ),
 );
 
+if ( ! tutor_utils()->get_option( 'instructor_can_delete_course' ) && ! current_user_can( 'administrator' ) ) {
+	unset( $available_status['trash'] );
+}
+
+$future_list = array(
+	'publish' => array( __( 'Publish', 'tutor' ), 'select-success' ),
+	'future'  => array( __( 'Schedule', 'tutor' ), 'select-default' ),
+);
+
+$show_course_delete = false;
+if ( 'trash' === $active_tab && current_user_can( 'administrator' ) ) {
+	$show_course_delete = true;
+}
 ?>
 
 <div class="tutor-admin-wrap">
@@ -149,6 +166,7 @@ $available_status = array(
 	<div class="tutor-admin-body">
 		<div class="tutor-mt-24">
 			<div class="tutor-table-responsive">
+
 				<table class="tutor-table tutor-table-middle table-dashboard-course-list">
 					<thead class="tutor-text-sm tutor-text-400">
 						<tr>
@@ -167,10 +185,13 @@ $available_status = array(
 							<th width="13%">
 								<?php esc_html_e( 'Author', 'tutor' ); ?>
 							</th>
-							<th width="6%">
-								<?php esc_html_e( 'Price', 'tutor' ); ?>
+							<th width="10%">
+								<?php
+								$membership_only_mode = apply_filters( 'tutor_membership_only_mode', false );
+								echo esc_html( $membership_only_mode ? __( 'Plan', 'tutor' ) : __( 'Price', 'tutor' ) );
+								?>
 							</th>
-							<th class="tutor-table-rows-sorting" width="10%">
+							<th class="tutor-table-rows-sorting" width="15%">
 								<?php esc_html_e( 'Date', 'tutor' ); ?>
 								<span class="a-to-z-sort-icon tutor-icon-ordering-a-z"></span>
 							</th>
@@ -185,6 +206,7 @@ $available_status = array(
 							$course_meta_data = tutor_utils()->get_course_meta_data( $course_ids );
 							$authors          = array();
 
+							//phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 							foreach ( $the_query->posts as $key => $post ) :
 								$count_lesson = isset( $course_meta_data[ $post->ID ] ) ? $course_meta_data[ $post->ID ]['lesson'] : 0;
 
@@ -202,6 +224,7 @@ $available_status = array(
 								}
 
 								$author_details = $authors[ $post->post_author ];
+								$edit_link      = $add_course_url . "&course_id=$post->ID";
 								?>
 								<tr>
 									<td>
@@ -212,7 +235,7 @@ $available_status = array(
 
 									<td>
 										<div class="tutor-d-flex tutor-align-center tutor-gap-2">
-											<a href="<?php echo esc_url( admin_url( 'post.php?post=' . $post->ID . '&action=edit' ) ); ?>" class="tutor-d-block">
+											<a href="<?php echo esc_url( $edit_link ); ?>" class="tutor-d-block">
 												<div style="width: 76px;">
 													<div class="tutor-ratio tutor-ratio-16x9">
 														<img class="tutor-radius-6" src="<?php echo esc_url( $thumbnail ); ?>" alt="<?php the_title(); ?>" loading="lazy">
@@ -221,7 +244,7 @@ $available_status = array(
 											</a>
 
 											<div>
-												<a class="tutor-table-link" href="<?php echo esc_url( admin_url( 'post.php?post=' . $post->ID . '&action=edit' ) ); ?>">
+												<a class="tutor-table-link" href="<?php echo esc_url( $edit_link ); ?>">
 													<?php echo esc_html( $post->post_title ); ?>
 												</a>
 
@@ -261,7 +284,7 @@ $available_status = array(
 									<td>
 										<span class="tutor-fw-normal tutor-fs-7">
 											<?php
-												$terms = wp_get_post_terms( $post->ID, 'course-category' );
+												$terms = wp_get_post_terms( $post->ID, CourseModel::COURSE_CATEGORY );
 											if ( count( $terms ) ) {
 												echo esc_html( implode( ', ', array_column( $terms, 'name' ) ) . '&nbsp;' );
 											} else {
@@ -297,6 +320,7 @@ $available_status = array(
 												echo $price; //phpcs:ignore
 											}
 												// Alert class for course status.
+												//phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 												$status = ( 'publish' === $post->post_status ? 'select-success' : ( 'pending' === $post->post_status ? 'select-warning' : ( 'trash' === $post->post_status ? 'select-danger' : ( 'private' === $post->post_status ? 'select-default' : 'select-default' ) ) ) );
 											?>
 										</div>
@@ -305,10 +329,10 @@ $available_status = array(
 									<td>
 										<div class="tutor-fw-normal">
 											<div class="tutor-fs-7 tutor-mb-4">
-												<?php echo esc_html( tutor_get_formated_date( get_option( 'date_format' ), $post->post_date ) ); ?>
+												<?php echo esc_html( tutor_i18n_get_formated_date( $post->post_date, get_option( 'date_format' ) ) ); ?>
 											</div>
 											<div class="tutor-fs-8 tutor-color-muted">
-												<?php echo esc_html( tutor_get_formated_date( get_option( 'time_format' ), $post->post_date ) ); ?>
+												<?php echo esc_html( tutor_i18n_get_formated_date( $post->post_date, get_option( 'time_format' ) ) ); ?>
 											</div>
 										</div>
 									</td>
@@ -317,17 +341,26 @@ $available_status = array(
 										<div class="tutor-d-flex tutor-align-center tutor-justify-end tutor-gap-2">
 											<div class="tutor-form-select-with-icon <?php echo esc_attr( $status ); ?>">
 												<select title="<?php esc_attr_e( 'Update course status', 'tutor' ); ?>" class="tutor-table-row-status-update" data-id="<?php echo esc_attr( $post->ID ); ?>" data-status="<?php echo esc_attr( $post->post_status ); ?>" data-status_key="status" data-action="tutor_change_course_status">
-													<?php foreach ( $available_status as $key => $value ) : ?>
-														<option data-status_class="<?php echo esc_attr( $value[1] ); ?>" value="<?php echo esc_attr( $key ); ?>" <?php selected( $key, $post->post_status, 'selected' ); ?>>
-															<?php echo esc_html( $value[0] ); ?>
-														</option>
-													<?php endforeach; ?>
+													<?php
+													$status_list = $available_status;
+													if ( 'future' === $post->post_status ) {
+														$status_list = $future_list;
+													}
+
+													foreach ( $status_list as $key => $value ) :
+														?>
+													<option data-status_class="<?php echo esc_attr( $value[1] ); ?>" value="<?php echo esc_attr( $key ); ?>" <?php selected( $key, $post->post_status, 'selected' ); ?>>
+														<?php echo esc_html( $value[0] ); ?>
+													</option>
+														<?php
+													endforeach;
+													?>
 												</select>
 												<i class="icon1 tutor-icon-eye-bold"></i>
 												<i class="icon2 tutor-icon-angle-down"></i>
 											</div>
 											<a class="tutor-btn tutor-btn-outline-primary tutor-btn-sm" href="<?php echo esc_url( get_permalink( $post->ID ) ); ?>" target="_blank">
-												<?php esc_html_e( 'View Course', 'tutor' ); ?>
+												<?php esc_html_e( 'View', 'tutor' ); ?>
 											</a>
 											<div class="tutor-dropdown-parent">
 												<button type="button" class="tutor-iconic-btn" action-tutor-dropdown="toggle">
@@ -335,15 +368,17 @@ $available_status = array(
 												</button>
 												<div id="table-dashboard-course-list-<?php echo esc_attr( $post->ID ); ?>" class="tutor-dropdown tutor-dropdown-dark tutor-text-left">
 													<?php do_action( 'tutor_admin_befor_course_list_action', $post->ID ); ?>
-													<a class="tutor-dropdown-item" href="<?php echo esc_url( admin_url( 'post.php?post=' . $post->ID . '&action=edit' ) ); ?>">
+													<a class="tutor-dropdown-item" href="<?php echo esc_url( $edit_link ); ?>">
 														<i class="tutor-icon-edit tutor-mr-8" area-hidden="true"></i>
 														<span><?php esc_html_e( 'Edit', 'tutor' ); ?></span>
 													</a>
 													<?php do_action( 'tutor_admin_middle_course_list_action', $post->ID ); ?>
+													<?php if ( $show_course_delete ) : ?>
 													<a href="javascript:void(0)" class="tutor-dropdown-item tutor-admin-course-delete" data-tutor-modal-target="tutor-common-confirmation-modal" data-id="<?php echo esc_attr( $post->ID ); ?>">
 														<i class="tutor-icon-trash-can-bold tutor-mr-8" area-hidden="true"></i>
 														<span><?php esc_html_e( 'Delete Permanently', 'tutor' ); ?></span>
 													</a>
+													<?php endif; ?>
 													<?php do_action( 'tutor_admin_after_course_list_action', $post->ID ); ?>
 												</div>
 											</div>
@@ -360,23 +395,25 @@ $available_status = array(
 						<?php endif; ?>
 					</tbody>
 				</table>
+
+				<div class="tutor-admin-page-pagination-wrapper tutor-mt-32">
+					<?php
+					/**
+					 * Prepare pagination data & load template
+					 */
+					if ( $the_query->found_posts > $limit ) {
+						$pagination_data     = array(
+							'total_items' => $the_query->found_posts,
+							'per_page'    => $limit,
+							'paged'       => $paged_filter,
+						);
+						$pagination_template = tutor()->path . 'views/elements/pagination.php';
+						tutor_load_template_from_custom_path( $pagination_template, $pagination_data );
+					}
+					?>
+				</div>
 			</div>
-		</div>
-		<div class="tutor-admin-page-pagination-wrapper tutor-mt-32">
-			<?php
-			/**
-			 * Prepare pagination data & load template
-			 */
-			if ( $the_query->found_posts > $limit ) {
-				$pagination_data     = array(
-					'total_items' => $the_query->found_posts,
-					'per_page'    => $limit,
-					'paged'       => $paged_filter,
-				);
-				$pagination_template = tutor()->path . 'views/elements/pagination.php';
-				tutor_load_template_from_custom_path( $pagination_template, $pagination_data );
-			}
-			?>
+			<!-- end table responsive -->
 		</div>
 	</div>
 </div>

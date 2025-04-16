@@ -9,14 +9,15 @@
  * @since 1.0.0
  */
 
-extract( $data ); // $attempt_list, $context;
+// Data variable contains $attempt_list, $context.
+extract( $data ); //phpcs:ignore WordPress.PHP.DontExtract.extract_extract
 
 $page_key                  = 'attempt-table';
 $table_columns             = include __DIR__ . '/contexts.php';
 $enabled_hide_quiz_details = tutor_utils()->get_option( 'hide_quiz_details' );
 
 if ( 'course-single-previous-attempts' == $context && is_array( $attempt_list ) && count( $attempt_list ) ) {
-	// Provide the attempt data from the first attempt
+	// Provide the attempt data from the first attempt.
 	// For now now attempt specific data is shown, that's why no problem if we take meta data from any attempt.
 	$attempt_data = $attempt_list[0];
 	include __DIR__ . '/header.php';
@@ -24,7 +25,7 @@ if ( 'course-single-previous-attempts' == $context && is_array( $attempt_list ) 
 ?>
 
 <?php if ( is_array( $attempt_list ) && count( $attempt_list ) ) : ?>
-	<div class="tutor-table-responsive tutor-my-24">
+	<div class="tutor-table-responsive tutor-table-mobile tutor-my-24">
 		<table class="tutor-table tutor-table-quiz-attempts">
 			<thead>
 				<tr>
@@ -54,7 +55,7 @@ if ( 'course-single-previous-attempts' == $context && is_array( $attempt_list ) 
 				<?php foreach ( $attempt_list as $attempt ) : ?>
 					<?php
 						$course_id         = is_object( $attempt ) && property_exists( $attempt, 'course_id' ) ? $attempt->course_id : 0;
-						$earned_percentage = $attempt->earned_marks > 0 ? ( number_format( ( $attempt->earned_marks * 100 ) / $attempt->total_marks ) ) : 0;
+						$earned_percentage = ( $attempt->earned_marks > 0 && $attempt->total_marks > 0 ) ? ( number_format( ( $attempt->earned_marks * 100 ) / $attempt->total_marks ) ) : 0;
 						$answers           = isset( $answers_array[ $attempt->attempt_id ] ) ? $answers_array[ $attempt->attempt_id ] : array();
 						$attempt_info      = @unserialize( $attempt->attempt_info );
 						$attempt_info      = ! is_array( $attempt_info ) ? array() : $attempt_info;
@@ -96,7 +97,7 @@ if ( 'course-single-previous-attempts' == $context && is_array( $attempt_list ) 
 								continue;
 							}
 							?>
-							<td>
+							<td data-title="<?php echo esc_attr( $column ); ?>">
 								<?php if ( 'checkbox' == $key ) : ?>
 									<div class="tutor-d-flex">
 										<input id="tutor-admin-list-<?php echo esc_attr( $attempt->attempt_id ); ?>" type="checkbox" class="tutor-form-check-input tutor-bulk-checkbox" name="tutor-bulk-checkbox-all" value="<?php echo esc_attr( $attempt->attempt_id ); ?>" />
@@ -142,13 +143,13 @@ if ( 'course-single-previous-attempts' == $context && is_array( $attempt_list ) 
 								<?php elseif ( 'question' == $key ) : ?>
 									<?php echo esc_html( count( $answers ) ); ?>
 								<?php elseif ( 'total_marks' == $key ) : ?>
-									<?php echo esc_html( round( $attempt->total_marks ) ); ?>
+									<?php echo esc_html( isset( $attempt->total_marks ) ? round( $attempt->total_marks ) : '0' ); ?>
 								<?php elseif ( 'correct_answer' == $key ) : ?>
 									<?php echo esc_html( $correct ); ?>
 								<?php elseif ( 'incorrect_answer' == $key ) : ?>
 									<?php echo esc_html( $incorrect ); ?>
 								<?php elseif ( 'earned_marks' == $key ) : ?>
-									<?php echo esc_html( round( $attempt->earned_marks ) . ' (' . $earned_percentage . '%)' ); ?>
+									<?php echo esc_html( isset( $attempt->earned_marks ) ? round( $attempt->earned_marks ) . ' (' . $earned_percentage . '%)' : '0 (0%)' ); ?>
 								<?php elseif ( 'result' == $key ) : ?>
 									<?php
 									if ( $has_pending ) {
@@ -161,8 +162,11 @@ if ( 'course-single-previous-attempts' == $context && is_array( $attempt_list ) 
 									?>
 								<?php elseif ( 'details' == $key ) : ?>
 									<?php
-										$url   = add_query_arg( array( 'view_quiz_attempt_id' => $attempt->attempt_id ), tutor()->current_url );
-										$style = '';
+										$url_args  = array( 'view_quiz_attempt_id' => $attempt->attempt_id );
+										$admin_url = add_query_arg( $url_args, admin_url( 'admin.php?page=tutor_quiz_attempts' ) );
+										$front_url = add_query_arg( $url_args, tutor()->current_url );
+										$url       = is_admin() ? $admin_url : $front_url;
+										$style     = '';
 									?>
 									<div class="tutor-d-inline-flex tutor-align-center" style="<?php echo esc_attr( ! is_admin() ? $style : '' ); ?>">
 										<a href="<?php echo esc_url( $url ); ?>" class="tutor-btn tutor-btn-outline-primary tutor-btn-sm">
@@ -170,7 +174,7 @@ if ( 'course-single-previous-attempts' == $context && is_array( $attempt_list ) 
 											if ( $has_pending && ( 'frontend-dashboard-students-attempts' == $context || 'backend-dashboard-students-attempts' == $context ) ) {
 												esc_html_e( 'Review', 'tutor' );
 											} else {
-												esc_html_e( 'Details', 'tutor-pro' );
+												esc_html_e( 'Details', 'tutor' );
 											}
 											?>
 										</a>

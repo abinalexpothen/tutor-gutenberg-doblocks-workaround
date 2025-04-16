@@ -10,6 +10,8 @@
 
 namespace TUTOR;
 
+use Tutor\Models\CourseModel;
+
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
@@ -75,8 +77,9 @@ class Course_Filter {
 		$courses_per_page = (int) tutils()->array_get( 'course_per_page', $sanitized_post, $default_per_page );
 
 		// Pagination arg.
-		$page                           = max( 1, Input::post( 'current_page', 0, Input::TYPE_INT ) );
-		$sanitized_post['current_page'] = $page;
+		$current_page                   = (int) Input::sanitize_request_data( 'current_page', 1 );
+		$paged                          = max( 1, $current_page );
+		$sanitized_post['current_page'] = $paged;
 
 		// Order arg.
 		$order_by = 'post_date';
@@ -110,14 +113,39 @@ class Course_Filter {
 			'post_status'    => 'publish',
 			'post_type'      => tutor()->course_post_type,
 			'posts_per_page' => $courses_per_page,
-			'paged'          => (int) $page,
+			'paged'          => $paged,
 			'orderby'        => $order_by,
 			'order'          => $order,
 			'tax_query'      => array(
-				'relation' => 'OR',
+				'relation' => 'AND',
 			),
 		);
 
+		$post_ids_array = tutils()->array_get( 'tutor-course-filter-post-ids', $sanitized_post, array() );
+
+		$post_ids_array = array_map(
+			function ( $post_id ) {
+				return (int) $post_id;
+			},
+			$post_ids_array
+		);
+
+		if ( count( $post_ids_array ) ) {
+			$args['post__in'] = $post_ids_array;
+		}
+
+		$exclude_ids_array = tutils()->array_get( 'tutor-course-filter-exclude-ids', $sanitized_post, array() );
+
+		$exclude_ids_array = array_map(
+			function ( $exclude_id ) {
+				return (int) $exclude_id;
+			},
+			$exclude_ids_array
+		);
+
+		if ( count( $exclude_ids_array ) ) {
+			$args['post__not_in'] = $exclude_ids_array;
+		}
 		// Prepare taxonomy.
 		foreach ( array( 'category', 'tag' ) as $taxonomy ) {
 
@@ -154,8 +182,12 @@ class Course_Filter {
 			$type_array = tutils()->array_get( 'tutor-course-filter-' . $type, $sanitized_post, array() );
 			$type_array = array_map( 'sanitize_text_field', ( is_array( $type_array ) ? $type_array : array( $type_array ) ) );
 
-			if ( 'level' == $type && in_array( 'all_levels', $type_array ) ) {
+			if ( 'level' === $type && in_array( 'all_levels', $type_array, true ) ) {
 				continue;
+			}
+
+			if ( in_array( Course::PRICE_TYPE_PAID, $type_array, true ) ) {
+				$type_array = apply_filters( 'tutor_course_filter_price_type_paid', $type_array );
 			}
 
 			if ( count( $type_array ) > 0 ) {
@@ -304,7 +336,7 @@ class Course_Filter {
 	 * @return string customized term link
 	 */
 	public static function filter_course_category_term_link( string $termlink, \WP_Term $term, string $taxonomy ) {
-		if ( 'course-category' === $taxonomy ) {
+		if ( CourseModel::COURSE_CATEGORY === $taxonomy ) {
 			$termlink = add_query_arg( 'tutor-course-filter-category', $term->term_id, $termlink );
 
 		}

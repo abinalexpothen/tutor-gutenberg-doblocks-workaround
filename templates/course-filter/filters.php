@@ -17,13 +17,15 @@ $filter_prices = array(
 );
 
 $course_levels     = tutor_utils()->course_levels();
-$supported_filters = tutor_utils()->get_option( 'supported_course_filters', array() );
 $supported_filters = array_keys( $supported_filters );
 $reset_link        = remove_query_arg( $supported_filters, get_pagenum_link() );
+
+! isset( $supported_filters ) ? $supported_filters = tutor_utils()->get_option( 'supported_course_filters', array() ) : 0;
+
 ?>
 
 <form class="tutor-course-filter-form tutor-form">
-	<div class="tutor-mb-16 tutor-d-block tutor-d-lg-none tutor-text-right">
+	<div class="tutor-mb-16 tutor-d-block tutor-d-xl-none tutor-text-right">
 		<a href="#" class="tutor-iconic-btn tutor-mr-n8" tutor-hide-course-filter><span class="tutor-icon-times" area-hidden="true"></span></a>
 	</div>
 
@@ -37,6 +39,15 @@ $reset_link        = remove_query_arg( $supported_filters, get_pagenum_link() );
 			</div>
 		</div>
 	<?php endif; ?>
+
+	<?php
+		/**
+		 * Add action before category filter.
+		 *
+		 * @since 2.2.0
+		 */
+		do_action( 'tutor_before_course_category_filter' );
+	?>
 
 	<?php if ( in_array( 'category', $supported_filters ) ) : ?>
 		<div class="tutor-widget tutor-widget-course-categories tutor-mt-48">
@@ -94,9 +105,19 @@ $reset_link        = remove_query_arg( $supported_filters, get_pagenum_link() );
 	<?php endif; ?>
 
 	<?php
-		$is_membership = get_tutor_option( 'monetize_by' ) == 'pmpro' && tutor_utils()->has_pmpro();
-	if ( ! $is_membership && in_array( 'price_type', $supported_filters ) ) :
+	$is_pm_pro_membership       = 'pmpro' === get_tutor_option( 'monetize_by' ) && tutor_utils()->has_pmpro();
+	$tutor_membership_only_mode = apply_filters( 'tutor_membership_only_mode', false );
+	if ( ! $tutor_membership_only_mode && ! $is_pm_pro_membership && in_array( 'price_type', $supported_filters, true ) ) :
 		?>
+		<?php
+		/**
+		 * Add action before price filter.
+		 *
+		 * @since 2.2.0
+		 */
+		do_action( 'tutor_before_course_price_filter' );
+		?>
+
 	<div class="tutor-widget tutor-widget-course-price tutor-mt-48">
 		<h3 class="tutor-widget-title">
 		<?php esc_html_e( 'Price', 'tutor' ); ?>

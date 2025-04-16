@@ -34,13 +34,8 @@ wp_enqueue_media();
 		<th><label for="description"><?php esc_html_e( 'Profile Bio', 'tutor' ); ?></label></th>
 		<td>
 			<?php
-			$settings = array(
-				'teeny'         => true,
-				'media_buttons' => false,
-				'quicktags'     => false,
-				'editor_height' => 200,
-			);
-			wp_editor( get_user_meta( $user->ID, '_tutor_profile_bio', true ), '_tutor_profile_bio', $settings );
+			$profile_bio = wp_kses( get_user_meta( $user->ID, '_tutor_profile_bio', true ), tutor_utils()->allowed_profile_bio_tags() );
+			wp_editor( $profile_bio, '_tutor_profile_bio', tutor_utils()->get_profile_bio_editor_config( '_tutor_profile_bio' ) );
 			?>
 
 			<p class="description"><?php esc_html_e( 'Write a little bit more about you, it will show publicly.', 'tutor' ); ?></p>

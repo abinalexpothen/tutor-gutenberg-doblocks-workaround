@@ -5,10 +5,23 @@
 .tutor-admin {
 	&-wrap {
 		margin-left: -20px;
-		// background-color: #E9EAED;
+		.rtl & {
+			margin-left: 0px;
+			margin-right: -20px;
+		}
+		
+		@include breakpoint-max(782) {
+			margin-left: -10px;
+			.rtl & {
+				margin-left: 0px;
+				margin-right: -10px;
+			}
+		}
 
 		// reset
-		* {
+		*,
+		::after,
+		::before {
 			box-sizing: border-box;
 		}
 
@@ -39,12 +52,10 @@
 
 	&-container {
 		max-width: 1160px;
-		min-width: 760px;
 		margin-left: auto;
 		margin-right: auto;
-		padding-left: 30px;
-		padding-right: 30px;
-		overflow-x: auto;
+		padding-left: 20px;
+		padding-right: 20px;
 
 		&-sm {
 			max-width: 760px;
@@ -102,10 +113,20 @@
 		&-icon {
 			&:not(.tutor-form-icon-reverse) ~ .tutor-form-control {
 				padding-left: 40px !important;
+				
+				.rtl & {
+					padding-left: 16px !important;
+					padding-right: 40px !important;
+				}
 			}
 
 			&-reverse ~ .tutor-form-control {
 				padding-right: 40px !important;
+
+				.rtl & {
+					padding-right: 16px !important;
+					padding-left: 40px !important;
+				}
 			}
 		}
 	}
@@ -117,18 +138,25 @@
 	}
 }
 
+table.tutor-table.tutor-table-with-checkbox {
+	.td-checkbox input[type='checkbox'] {
+		margin: 0;
+	}
+}
+
+// Hide empty text link from dashboard menu.
+#adminmenu {
+	& li a[href=tutor-setup] {
+		display: none;
+	}
+}
+
 /*----------------------------------
 	Component containers
 ----------------------------------*/
 
 body.tutor-backend-tutor_settings #wpbody-content {
 	min-height: 100vh;
-
-	@include breakpoint-min(1400) {
-		.tutor-admin-container {
-			overflow-x: unset;
-		}
-	}
 }
 
 .ui-datepicker-buttonpane.ui-widget-content {
@@ -205,6 +233,15 @@ body.tutor-backend-tutor_settings #wpbody-content {
 /**
 * Option Field
 */
+
+.tutor-hide-option{
+	display: none!important;
+}
+
+.tutor-option-no-bottom-border{
+	border-bottom: 0!important;
+	padding-bottom: 0!important;
+}
 
 .tutor-option-field-row {
 	border-bottom: 1px solid #e4e4e4;
@@ -497,29 +534,6 @@ a.addon-buynow-link {
 	color: #fff;
 	padding: 5px 10px;
 	display: inline-block;
-}
-
-/**
-  Add-ons list
-   */
-
-.tutor-addons-list {
-	background-color: #fff;
-	min-height: 500px;
-	padding: 20px;
-}
-
-.tutor-addons-list .plugin-icon {
-	height: 120px !important;
-	width: auto !important;
-}
-
-.tutor-addons-list .plugin-card .desc {
-	margin-right: 0;
-}
-
-.tutor-addons-list .plugin-card .name {
-	margin-right: 50px;
 }
 
 /* RTL Style for name and desc */
@@ -956,8 +970,19 @@ span.filled_dash_unser {
 	height: auto;
 }
 
-.tutor-get-pro-text {
-	color: #e02424;
+a:has(> span.tutor-get-pro-text ) {
+	background-color: orange;
+    font-weight: 600;
+    color: #000 !important;
+
+	&:hover{
+		background-color: orange!important;
+    	color: #000 !important;
+	}
+}
+
+.tutor-text-orange {
+	color: orange;
 }
 
 .updating-icon:before {
@@ -1757,4 +1782,19 @@ h2.tutor-page-heading {
 	.mce-branding {
 		display: none;
 	}
+}
+
+.tutor-pro-badge{
+	background: #e5803c;
+    color: #fff;
+    font-weight: 400;
+    border-radius: 16px;
+    padding: 1px 6px;
+    font-size: 11px;
+    display: inline-block;
+    line-height: 15px;
+}
+
+.wp-submenu li a[href="admin.php?page=create-course"] {
+    display: none!important;
 }

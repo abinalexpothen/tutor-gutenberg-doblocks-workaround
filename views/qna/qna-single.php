@@ -14,7 +14,7 @@ use TUTOR\Input;
 extract( $data ); // $question_id
 
 // QNA data.
-	$question = tutor_utils()->get_qa_question( $question_id );
+$question = tutor_utils()->get_qa_question( (int) $question_id );
 if ( ! $question ) {
 	tutor_utils()->tutor_empty_state();
 	return;
@@ -25,7 +25,7 @@ if ( property_exists( $question, 'meta' ) ) {
 }
 
 	$answers  = tutor_utils()->get_qa_answer_by_question( $question_id );
-	$back_url = isset( $back_url ) ? $back_url : remove_query_arg( 'question_id', tutor()->current_url );
+	$back_url = isset( $back_url ) ? $back_url : remove_query_arg( 'question_id', is_admin() ? admin_url( 'admin.php?page=question_answer' ) : tutor()->current_url );
 
 	// Badges data.
 	$_user_id = get_current_user_id();
@@ -132,7 +132,10 @@ if ( property_exists( $question, 'user_id' ) ) {
 									</div>
 
 									<div class="tutor-qna-text tutor-fs-7">
-										<?php echo wp_kses_post( stripslashes( $answer->comment_content ) ); ?>
+										<?php
+											$content = stripslashes( $answer->comment_content );
+											echo tutor()->has_pro ? wp_kses_post( $content ) : esc_textarea( $content );
+										?>
 									</div>
 
 								<?php if ( $is_single && 0 == $answer->comment_parent ) : ?>

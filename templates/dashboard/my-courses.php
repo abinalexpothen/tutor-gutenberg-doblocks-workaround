@@ -18,9 +18,10 @@ $current_user_id                     = get_current_user_id();
 
 // Map required course status according to page.
 $status_map = array(
-	'my-courses'                 => CourseModel::STATUS_PUBLISH,
-	'my-courses/draft-courses'   => CourseModel::STATUS_DRAFT,
-	'my-courses/pending-courses' => CourseModel::STATUS_PENDING,
+	'my-courses'                  => CourseModel::STATUS_PUBLISH,
+	'my-courses/draft-courses'    => CourseModel::STATUS_DRAFT,
+	'my-courses/pending-courses'  => CourseModel::STATUS_PENDING,
+	'my-courses/schedule-courses' => CourseModel::STATUS_FUTURE,
 );
 
 // Set currently required course status fo rcurrent tab.
@@ -31,6 +32,7 @@ $count_map = array(
 	'publish' => CourseModel::get_courses_by_instructor( $current_user_id, CourseModel::STATUS_PUBLISH, 0, 0, true ),
 	'pending' => CourseModel::get_courses_by_instructor( $current_user_id, CourseModel::STATUS_PENDING, 0, 0, true ),
 	'draft'   => CourseModel::get_courses_by_instructor( $current_user_id, CourseModel::STATUS_DRAFT, 0, 0, true ),
+	'future'  => CourseModel::get_courses_by_instructor( $current_user_id, CourseModel::STATUS_FUTURE, 0, 0, true ),
 );
 
 $course_archive_arg = isset( $GLOBALS['tutor_course_archive_arg'] ) ? $GLOBALS['tutor_course_archive_arg']['column_per_row'] : null;
@@ -39,7 +41,11 @@ $per_page           = tutor_utils()->get_option( 'courses_per_page', 10 );
 $paged              = Input::get( 'current_page', 1, Input::TYPE_INT );
 $offset             = $per_page * ( $paged - 1 );
 
-$results = CourseModel::get_courses_by_instructor( $current_user_id, $status, $offset, $per_page );
+$results            = CourseModel::get_courses_by_instructor( $current_user_id, $status, $offset, $per_page );
+$show_course_delete = true;
+if ( ! current_user_can( 'administrator' ) && ! tutor_utils()->get_option( 'instructor_can_delete_course' ) ) {
+	$show_course_delete = false;
+}
 ?>
 
 <div class="tutor-dashboard-my-courses">
@@ -65,6 +71,11 @@ $results = CourseModel::get_courses_by_instructor( $current_user_id, $status, $o
 						<?php esc_html_e( 'Draft', 'tutor' ); ?> <?php echo esc_html( '(' . $count_map['draft'] . ')' ); ?>
 					</a>
 				</li>
+				<li class="tutor-nav-item">
+					<a class="tutor-nav-link<?php echo esc_attr( 'my-courses/schedule-courses' === $active_tab ? ' is-active' : '' ); ?>" href="<?php echo esc_url( tutor_utils()->get_tutor_dashboard_page_permalink( 'my-courses/schedule-courses' ) ); ?>">
+						<?php esc_html_e( 'Schedule', 'tutor' ); ?> <?php echo esc_html( '(' . $count_map['future'] . ')' ); ?>
+					</a>
+				</li>
 			</ul>
 		</div>
 	
@@ -83,20 +94,25 @@ $results = CourseModel::get_courses_by_instructor( $current_user_id, $status, $o
 				foreach ( $results as $post ) :
 					setup_postdata( $post );
 
-					$avg_rating       = tutor_utils()->get_course_rating()->rating_avg;
-					$tutor_course_img = get_tutor_course_thumbnail_src();
-					$id_string_delete = 'tutor_my_courses_delete_' . $post->ID;
-					$row_id           = 'tutor-dashboard-my-course-' . $post->ID;
-					$course_duration  = get_tutor_course_duration_context( $post->ID, true );
-					$course_students  = tutor_utils()->count_enrolled_users_by_course();
+					$avg_rating         = tutor_utils()->get_course_rating()->rating_avg;
+					$tutor_course_img   = get_tutor_course_thumbnail_src();
+					$id_string_delete   = 'tutor_my_courses_delete_' . $post->ID;
+					$row_id             = 'tutor-dashboard-my-course-' . $post->ID;
+					$course_duration    = get_tutor_course_duration_context( $post->ID, true );
+					$course_students    = tutor_utils()->count_enrolled_users_by_course();
+					$is_main_instructor = CourseModel::is_main_instructor( $post->ID );
 					?>
-	
+
 					<div id="<?php echo esc_attr( $row_id ); ?>" class="tutor-card tutor-course-card tutor-mycourse-<?php the_ID(); ?>">
 						<a href="<?php echo esc_url( get_the_permalink() ); ?>" class="tutor-d-block">
 							<div class="tutor-ratio tutor-ratio-16x9">
 								<img class="tutor-card-image-top" src="<?php echo empty( $tutor_course_img ) ? esc_url( $placeholder_img ) : esc_url( $tutor_course_img ); ?>" alt="<?php the_title(); ?>" loading="lazy">
 							</div>
 						</a>
+
+						<?php if ( false === $is_main_instructor ) : ?>
+						<div class="tutor-course-co-author-badge"><?php esc_html_e( 'Co-author', 'tutor' ); ?></div>
+						<?php endif; ?>
 
 						<div class="tutor-card-body">
 							<div class="tutor-meta tutor-mb-8">
@@ -150,11 +166,14 @@ $results = CourseModel::get_courses_by_instructor( $current_user_id, $status, $o
 							<div class="tutor-d-flex tutor-align-center tutor-justify-between">
 								<div class="tutor-d-flex tutor-align-center">
 									<span class="tutor-fs-7 tutor-fw-medium tutor-color-muted tutor-mr-4">
-										<?php esc_html_e( 'Price:', 'tutor' ); ?>
+										<?php
+										$membership_only_mode = apply_filters( 'tutor_membership_only_mode', false );
+										echo esc_html( $membership_only_mode ? __( 'Plan:', 'tutor' ) : '' );
+										?>
 									</span>
 									<span class="tutor-fs-7 tutor-fw-medium tutor-color-black">
 										<?php
-											$price = tutor_utils()->get_course_price();
+										$price = tutor_utils()->get_course_price();
 										if ( null === $price ) {
 											esc_html_e( 'Free', 'tutor' );
 										} else {
@@ -164,7 +183,7 @@ $results = CourseModel::get_courses_by_instructor( $current_user_id, $status, $o
 									</span>
 								</div>
 								<div class="tutor-iconic-btn-group tutor-mr-n8">
-									<a href="<?php echo esc_url( tutor_utils()->course_edit_link( $post->ID ) ); ?>" class="tutor-iconic-btn tutor-my-course-edit">
+									<a href="<?php echo esc_url( tutor_utils()->course_edit_link( $post->ID, tutor()->has_pro ? 'frontend' : 'backend' ) ); ?>" class="tutor-iconic-btn tutor-my-course-edit">
 										<i class="tutor-icon-edit" area-hidden="true"></i>
 									</a>
 									<div class="tutor-dropdown-parent">
@@ -172,9 +191,9 @@ $results = CourseModel::get_courses_by_instructor( $current_user_id, $status, $o
 											<span class="tutor-icon-kebab-menu" area-hidden="true"></span>
 										</button>
 										<div id="table-dashboard-course-list-<?php echo esc_attr( $post->ID ); ?>" class="tutor-dropdown tutor-dropdown-dark tutor-text-left">
-											
+
 											<!-- Submit Action -->
-											<?php if ( tutor()->has_pro && in_array( $post->post_status, array( CourseModel::STATUS_DRAFT ) ) ) : ?>
+											<?php if ( tutor()->has_pro && in_array( $post->post_status, array( CourseModel::STATUS_DRAFT ), true ) ) : ?>
 												<?php
 												$params = http_build_query(
 													array(
@@ -257,11 +276,13 @@ $results = CourseModel::get_courses_by_instructor( $current_user_id, $status, $o
 											<!-- # Cancel Submission -->
 											
 											<!-- Delete Action -->
-											<?php if ( in_array( $post->post_status, array( CourseModel::STATUS_PUBLISH, CourseModel::STATUS_DRAFT ) ) ) : ?>
-											<a href="#" data-tutor-modal-target="<?php echo esc_attr( $id_string_delete ); ?>" class="tutor-dropdown-item tutor-admin-course-delete">
-												<i class="tutor-icon-trash-can-bold tutor-mr-8" area-hidden="true"></i>
-												<span><?php esc_html_e( 'Delete', 'tutor' ); ?></span>
-											</a>
+											<?php if ( $is_main_instructor && in_array( $post->post_status, array( CourseModel::STATUS_PUBLISH, CourseModel::STATUS_DRAFT ) ) ) : ?>
+												<?php if ( $show_course_delete ) : ?>
+												<a href="#" data-tutor-modal-target="<?php echo esc_attr( $id_string_delete ); ?>" class="tutor-dropdown-item tutor-admin-course-delete">
+													<i class="tutor-icon-trash-can-bold tutor-mr-8" area-hidden="true"></i>
+													<span><?php esc_html_e( 'Delete', 'tutor' ); ?></span>
+												</a>
+												<?php endif; ?>
 											<?php endif; ?>
 											<!-- # Delete Action -->
 

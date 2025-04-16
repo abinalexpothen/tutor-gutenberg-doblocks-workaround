@@ -7,9 +7,9 @@
  * @package Filter / sorting
  * @since v2.0.0
  */
- const { __, _x, _n, _nx } = wp.i18n;
+const { __, _x, _n, _nx } = wp.i18n;
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
 	const commonConfirmModal = document.getElementById('tutor-common-confirmation-modal');
 	const commonConfirmForm = document.getElementById('tutor-common-confirmation-form');
 
@@ -43,6 +43,24 @@ document.addEventListener('DOMContentLoaded', function() {
 			{ once: true },
 		);
 	}
+	const filterPaymentStatus = document.getElementById('tutor-backend-filter-payment-status');
+	filterPaymentStatus?.addEventListener(
+		'change',
+		(e) => {
+			window.location = urlPrams('payment-status', e.target.value);
+		},
+		{ once: true },
+	);
+	
+	const filterCouponStatus = document.getElementById('tutor-backend-filter-coupon-status');
+
+	filterCouponStatus?.addEventListener(
+		'change', 
+		(e) => {
+			window.location = urlPrams('coupon-status', e.target.value);
+		},
+		{ once: true },
+	);
 
 	const filterSearch = document.getElementById('tutor-admin-search-filter-form');
 	const search_field = document.getElementById('tutor-backend-filter-search');
@@ -50,13 +68,13 @@ document.addEventListener('DOMContentLoaded', function() {
 	if (filterSearch) {
 		// Resubmit filter on clear
 		// So we can avoid wrong tab link retaining search value
-		search_field.addEventListener('search', e=>{
-			let {value} = e.currentTarget || {};
-			if(/\S+/.test(value)==false) {
+		search_field.addEventListener('search', e => {
+			let { value } = e.currentTarget || {};
+			if (/\S+/.test(value) == false) {
 				window.location = urlPrams('search', '');
 			}
 		});
-		
+
 		// Assign search value to normal form submission
 		filterSearch.onsubmit = (e) => {
 			e.preventDefault();
@@ -123,7 +141,7 @@ document.addEventListener('DOMContentLoaded', function() {
 				submitButton.classList.remove('is-loading')
 				if (post.ok) {
 					const response = await post.json();
-					if (response.success) {
+					if (response.success || 200 === response?.status_code) {
 						location.reload();
 					} else {
 						let { message = __('Something went wrong, please try again ', 'tutor') } = response.data || {};
@@ -187,8 +205,25 @@ document.addEventListener('DOMContentLoaded', function() {
 			const id = e.currentTarget.dataset.id;
 
 			if (commonConfirmForm) {
-				console.log(commonConfirmForm);
 				commonConfirmForm.elements.action.value = 'tutor_course_delete';
+				commonConfirmForm.elements.id.value = id;
+			}
+		};
+	}
+
+	/**
+	 * Handle permanent delete action
+	 *
+	 * @since 3.0.0
+	 */
+	const permanentDeleteElem = document.querySelectorAll('.tutor-delete-permanently');
+	for (let deleteElem of permanentDeleteElem) {
+		deleteElem.onclick = (e) => {
+			const id = e.currentTarget.dataset.id;
+			const action = e.currentTarget.dataset.action;
+
+			if (commonConfirmForm) {
+				commonConfirmForm.elements.action.value = action
 				commonConfirmForm.elements.id.value = id;
 			}
 		};
@@ -215,10 +250,17 @@ document.addEventListener('DOMContentLoaded', function() {
 				const response = await post.json();
 				submitButton.classList.remove('is-loading');
 				if (response) {
-					tutor_toast(__('Delete', 'tutor'), __('Course has been deleted ', 'tutor'), 'success');
-					location.reload();
+					if (typeof response === 'object' && response.success) {
+						tutor_toast(__('Delete', 'tutor'), response.data, 'success');
+						location.reload(true);
+					} else if (typeof response === 'object' && response.success === false) {
+						tutor_toast(__('Failed', 'tutor'), response.data, 'error');
+					} else {
+						tutor_toast(__('Delete', 'tutor'), __('Successfully deleted ', 'tutor'), 'success');
+						location.reload();
+					}
 				} else {
-					tutor_toast(__('Failed', 'tutor'), __('Course delete failed ', 'tutor'), 'error');
+					tutor_toast(__('Failed', 'tutor'), __('Delete failed ', 'tutor'), 'error');
 				}
 			}
 		};

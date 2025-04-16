@@ -10,7 +10,11 @@
 
 namespace TUTOR;
 
+use Tutor\Ecommerce\OrderController;
+use Tutor\Helpers\HttpHelper;
 use TUTOR\Input;
+use Tutor\Models\CourseModel;
+use Tutor\Traits\JsonResponse;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -22,6 +26,8 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since 1.0.0
  */
 class Admin {
+	use JsonResponse;
+
 	/**
 	 * Constructor
 	 *
@@ -29,6 +35,9 @@ class Admin {
 	 * @return void
 	 */
 	public function __construct() {
+
+		add_action( 'admin_notices', array( $this, 'show_unstable_version_admin_notice' ) );
+
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		// Force activate menu for necessary.
 		add_filter( 'parent_file', array( $this, 'parent_menu_active' ) );
@@ -37,7 +46,6 @@ class Admin {
 		add_action( 'admin_init', array( $this, 'filter_posts_for_instructors' ) );
 		add_action( 'load-post.php', array( $this, 'check_if_current_users_post' ) );
 
-		add_action( 'admin_action_uninstall_tutor_and_erase', array( $this, 'erase_tutor_data' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( TUTOR_FILE ), array( $this, 'plugin_action_links' ) );
 
 		// Plugin Row Meta.
@@ -50,6 +58,32 @@ class Admin {
 
 		// Handle flash toast message for redirect_to util helper.
 		add_action( 'admin_head', array( new Utils(), 'handle_flash_message' ), 999 );
+		// add_action( 'tutor_after_settings_menu', '\TUTOR\WhatsNew::whats_new_menu', 11 );
+
+		add_action( 'admin_bar_menu', array( $this, 'add_toolbar_items' ), 100 );
+
+		add_action( 'wp_ajax_tutor_do_not_show_feature_page', array( $this, 'handle_do_not_show_feature_page' ) );
+	}
+
+	/**
+	 * Show unstable version notice.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @return void
+	 */
+	public function show_unstable_version_admin_notice() {
+		$version = tutor_utils()->extract_version_details( TUTOR_VERSION );
+		if ( ! $version->is_stable ) {
+			/* translators: %s: version name */
+			$message = sprintf( __( 'You\'re currently using Tutor LMS %s. To ensure stability, please do not use it on a live site.', 'tutor' ), '<strong>' . $version->version . '</strong>' );
+			?>
+			<div class="notice notice-warning">
+				<p><strong><?php esc_html_e( 'Warning!', 'tutor' ); ?></strong></p>
+				<p><?php echo wp_kses_post( $message ); ?></p>
+			</div>
+			<?php
+		}
 	}
 
 	/**
@@ -71,7 +105,7 @@ class Admin {
 
 		$pro_text = '';
 		if ( $has_pro ) {
-			$pro_text = ' ' . __( 'Pro', 'tutor' );
+			$pro_text = ' ' . apply_filters( 'tutor_pro_flag', __( 'Pro', 'tutor' ) );
 		}
 
 		$enable_course_marketplace = (bool) tutor_utils()->get_option( 'enable_course_marketplace' );
@@ -99,6 +133,18 @@ class Admin {
 		// Added @since v2.0.0.
 		add_submenu_page( 'tutor', __( 'Courses', 'tutor' ), __( 'Courses', 'tutor' ), 'manage_tutor_instructor', 'tutor', array( $this, 'tutor_course_list' ) );
 
+		if ( '3.0.0' !== get_option( 'tutor-new-feature' ) ) {
+			add_submenu_page( 'tutor', __( 'What\'s New', 'tutor' ), sprintf( '<span class="tutor-new-feature tutor-text-orange">%s</span>', __( 'What\'s New', 'tutor' ) ), 'manage_tutor', 'tutor-new-feature', array( $this, 'feature_promotion_page' ) );
+		}
+
+		// Ecommerce menu @since 3.0.0.
+		do_action( 'tutor_after_courses_admin_menu' );
+
+		add_submenu_page( 'tutor', __( 'Course Builder', 'tutor' ), '<span class="tutor-create-course">Create Course</span>', 'manage_tutor_instructor', 'create-course', array( new Course( false ), 'load_course_builder' ) );
+
+		// Extendable action hook @since 2.2.0.
+		do_action( 'tutor_after_courses_menu' );
+
 		add_submenu_page( 'tutor', __( 'Categories', 'tutor' ), __( 'Categories', 'tutor' ), 'manage_tutor', 'edit-tags.php?taxonomy=course-category&post_type=' . $course_post_type, null );
 
 		add_submenu_page( 'tutor', __( 'Tags', 'tutor' ), __( 'Tags', 'tutor' ), 'manage_tutor', 'edit-tags.php?taxonomy=course-tag&post_type=' . $course_post_type, null );
@@ -107,19 +153,16 @@ class Admin {
 
 		if ( $enable_course_marketplace ) {
 			add_submenu_page( 'tutor', __( 'Instructors', 'tutor' ), __( 'Instructors', 'tutor' ), 'manage_tutor', Instructors_List::INSTRUCTOR_LIST_PAGE, array( $this, 'tutor_instructors' ) );
+			add_submenu_page( 'tutor', __( 'Withdraw Requests', 'tutor' ), __( 'Withdraw Requests', 'tutor' ), 'manage_tutor', Withdraw_Requests_List::WITHDRAW_REQUEST_LIST_PAGE, array( $this, 'withdraw_requests' ) );
 		}
 
 		add_submenu_page( 'tutor', __( 'Announcements', 'tutor' ), __( 'Announcements', 'tutor' ), 'manage_tutor_instructor', 'tutor_announcements', array( $this, 'tutor_announcements' ) );
 
-		add_submenu_page( 'tutor', __( 'Q & A', 'tutor' ), __( 'Q & A ', 'tutor' ) . $unanswered_bubble, 'manage_tutor_instructor', Question_Answers_List::QUESTION_ANSWER_PAGE, array( $this, 'question_answer' ) );
+		add_submenu_page( 'tutor', __( 'Q&A', 'tutor' ), __( 'Q&A ', 'tutor' ) . $unanswered_bubble, 'manage_tutor_instructor', Question_Answers_List::QUESTION_ANSWER_PAGE, array( $this, 'question_answer' ) );
 
 		add_submenu_page( 'tutor', __( 'Quiz Attempts', 'tutor' ), __( 'Quiz Attempts', 'tutor' ), 'manage_tutor_instructor', Quiz_Attempts_List::QUIZ_ATTEMPT_PAGE, array( $this, 'quiz_attempts' ) );
 
-		if ( $enable_course_marketplace ) {
-			add_submenu_page( 'tutor', __( 'Withdraw Requests', 'tutor' ), __( 'Withdraw Requests', 'tutor' ), 'manage_tutor', Withdraw_Requests_List::WITHDRAW_REQUEST_LIST_PAGE, array( $this, 'withdraw_requests' ) );
-		}
-
-		add_submenu_page( 'tutor', __( 'Add-ons', 'tutor' ), __( 'Add-ons', 'tutor' ), 'manage_tutor', 'tutor-addons', array( $this, 'enable_disable_addons' ) );
+		add_submenu_page( 'tutor', __( 'Addons', 'tutor' ), __( 'Addons', 'tutor' ), 'manage_tutor', 'tutor-addons', array( $this, 'enable_disable_addons' ) );
 
 		do_action( 'tutor_admin_register' );
 
@@ -127,9 +170,43 @@ class Admin {
 
 		add_submenu_page( 'tutor', __( 'Settings', 'tutor' ), __( 'Settings', 'tutor' ), 'manage_tutor', 'tutor_settings', array( new \TUTOR\Options_V2(), 'load_settings_page' ) );
 
+		do_action( 'tutor_after_settings_menu' );
+
 		if ( ! $has_pro ) {
-			add_submenu_page( 'tutor', __( 'Get Pro', 'tutor' ), __( '<span class="dashicons dashicons-awards tutor-get-pro-text"></span> Get Pro', 'tutor' ), 'manage_options', 'tutor-get-pro', array( $this, 'tutor_get_pro' ) );
+			add_submenu_page( 'tutor', __( 'Upgrade to Pro', 'tutor' ), sprintf( '<span class="tutor-get-pro-text">%s</span>', __( 'Upgrade to Pro', 'tutor' ) ), 'manage_options', 'tutor-get-pro', array( $this, 'tutor_get_pro' ) );
 		}
+	}
+
+	/**
+	 * Welcome page opt-out
+	 *
+	 * @since 3.0.0
+	 */
+	public function handle_do_not_show_feature_page() {
+		tutor_utils()->check_nonce();
+
+		if ( ! User::is_admin() ) {
+			$this->json_response(
+				tutor_utils()->error_message(),
+				null,
+				HttpHelper::STATUS_BAD_REQUEST
+			);
+		}
+
+		update_option( 'tutor-new-feature', '3.0.0' );
+		$this->json_response( __( 'Success', 'tutor' ) );
+	}
+
+	/**
+	 * Show Feature Promotion Page for Free User.
+	 *
+	 * @since 2.2.0
+	 *
+	 * @return void
+	 */
+	public function feature_promotion_page() {
+		include tutor()->path . 'views/pages/welcome.php';
+		// include tutor()->path . 'views/pages/feature-promotion.php';
 	}
 
 	/**
@@ -199,12 +276,7 @@ class Admin {
 	 * @return void
 	 */
 	public function enable_disable_addons() {
-
-		if ( defined( 'TUTOR_PRO_VERSION' ) ) {
-			include tutor()->path . 'views/pages/enable_disable_addons.php';
-		} else {
-			include tutor()->path . 'views/pages/tutor-pro-addons.php';
-		}
+		include tutor()->path . 'views/pages/enable_disable_addons.php';
 	}
 
 	/**
@@ -261,7 +333,7 @@ class Admin {
 	 */
 	public function parent_menu_active( $parent_file ) {
 		$taxonomy = Input::get( 'taxonomy' );
-		if ( 'course-category' === $taxonomy || 'course-tag' === $taxonomy ) {
+		if ( CourseModel::COURSE_CATEGORY === $taxonomy || CourseModel::COURSE_TAG === $taxonomy ) {
 			return 'tutor';
 		}
 
@@ -282,10 +354,10 @@ class Admin {
 		$taxonomy         = Input::get( 'taxonomy' );
 		$course_post_type = tutor()->course_post_type;
 
-		if ( 'course-category' === $taxonomy ) {
+		if ( CourseModel::COURSE_CATEGORY === $taxonomy ) {
 			return 'edit-tags.php?taxonomy=course-category&post_type=' . $course_post_type;
 		}
-		if ( 'course-tag' === $taxonomy ) {
+		if ( CourseModel::COURSE_TAG === $taxonomy ) {
 			return 'edit-tags.php?taxonomy=course-tag&post_type=' . $course_post_type;
 		}
 
@@ -436,92 +508,6 @@ class Admin {
 	}
 
 	/**
-	 * Erase tutor data
-	 *
-	 * @since 1.0.0
-	 * @return void
-	 */
-	public function erase_tutor_data() {
-		global $wpdb;
-
-		$is_erase_data = tutor_utils()->get_option( 'delete_on_uninstall' );
-		// Deleting Data.
-
-		$plugin_file = tutor()->basename;
-		if ( $is_erase_data && current_user_can( 'deactivate_plugin', $plugin_file ) ) {
-			/**
-			 * Deleting Post Type, Meta Data, taxonomy
-			 */
-			$course_post_type = tutor()->course_post_type;
-			$lesson_post_type = tutor()->lesson_post_type;
-
-			$post_types = array(
-				$course_post_type,
-				$lesson_post_type,
-				'tutor_quiz',
-				'tutor_enrolled',
-				'topics',
-				'tutor_enrolled',
-				'tutor_announcements',
-			);
-
-			$post_type_strings = "'" . implode( "','", $post_types ) . "'";
-			$tutor_posts       = $wpdb->get_col( "SELECT ID from {$wpdb->posts} WHERE post_type in({$post_type_strings}) ;" ); //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-
-			if ( is_array( $tutor_posts ) && count( $tutor_posts ) ) {
-				foreach ( $tutor_posts as $post_id ) {
-					// Delete categories.
-					$terms = wp_get_object_terms( $post_id, 'course-category' );
-					foreach ( $terms as $term ) {
-						wp_remove_object_terms( $post_id, array( $term->term_id ), 'course-category' );
-					}
-
-					// Delete tags if available.
-					$terms = wp_get_object_terms( $post_id, 'course-tag' );
-					foreach ( $terms as $term ) {
-						wp_remove_object_terms( $post_id, array( $term->term_id ), 'course-tag' );
-					}
-
-					// Delete All Meta.
-					$wpdb->delete( $wpdb->postmeta, array( 'post_id' => $post_id ) );
-					$wpdb->delete( $wpdb->posts, array( 'ID' => $post_id ) );
-				}
-			}
-
-			/**
-			 * Deleting Comments (reviews, questions, quiz_answers, etc)
-			 */
-			$tutor_comments       = $wpdb->get_col( "SELECT comment_ID from {$wpdb->comments} WHERE comment_agent = 'comment_agent' ;" );
-			$comments_ids_strings = "'" . implode( "','", $tutor_comments ) . "'";
-			if ( is_array( $tutor_comments ) && count( $tutor_comments ) ) {
-				$wpdb->query( "DELETE from {$wpdb->commentmeta} WHERE comment_ID in({$comments_ids_strings}) " ); //phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			}
-			$wpdb->delete( $wpdb->comments, array( 'comment_agent' => 'comment_agent' ) );
-
-			/**
-			 * Delete Options
-			 */
-
-			delete_option( 'tutor_option' );
-			$wpdb->delete( $wpdb->usermeta, array( 'meta_key' => '_is_tutor_student' ) );
-			$wpdb->delete( $wpdb->usermeta, array( 'meta_key' => '_tutor_instructor_approved' ) );
-			$wpdb->delete( $wpdb->usermeta, array( 'meta_key' => '_tutor_instructor_status' ) );
-			$wpdb->delete( $wpdb->usermeta, array( 'meta_key' => '_is_tutor_instructor' ) );
-			$wpdb->query( "DELETE FROM {$wpdb->usermeta} WHERE meta_key LIKE  '%_tutor_completed_lesson_id_%' " );
-
-			// Deleting Table.
-			$prefix = $wpdb->prefix;
-			//phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$wpdb->query( "DROP TABLE IF EXISTS {$prefix}tutor_quiz_attempts, {$prefix}tutor_quiz_attempt_answers, {$prefix}tutor_quiz_questions, {$prefix}tutor_quiz_question_answers, {$prefix}tutor_earnings, {$prefix}tutor_withdraws " );
-
-			deactivate_plugins( $plugin_file );
-		}
-
-		wp_redirect( 'plugins.php' );
-		die();
-	}
-
-	/**
 	 * Plugin activation link
 	 *
 	 * @since 1.0.0
@@ -534,9 +520,9 @@ class Admin {
 
 		if ( ! $has_pro ) {
 			$actions['tutor_pro_link'] =
-				'<a href="https://www.themeum.com/product/tutor-lms/#pricing?utm_source=tutor_plugin_action_link&utm_medium=wordpress_dashboard&utm_campaign=go_premium" target="_blank">
+				'<a href="https://tutorlms.com/pricing?utm_source=tutor_plugin_action_link&utm_medium=wordpress_dashboard&utm_campaign=go_premium" target="_blank">
 					<span style="color: #ff7742; font-weight: bold;">' .
-						__( 'Upgrade to Pro', 'wp-megamenu' ) .
+						__( 'Upgrade to Pro', 'tutor' ) .
 					'</span>
 				</a>';
 		}
@@ -560,14 +546,14 @@ class Admin {
 
 		if ( tutor()->basename === $plugin_file ) {
 			$plugin_meta[] = sprintf(
-				'<a href="%s">%s</a>',
+				'<a href="%s"><strong style="color: #03bd24">%s</strong></a>',
 				esc_url( 'https://docs.themeum.com/tutor-lms/?utm_source=tutor&utm_medium=plugins_installation_list&utm_campaign=plugin_docs_link' ),
-				__( '<strong style="color: #03bd24">Documentation</strong>', 'tutor' )
+				esc_html__( 'Documentation', 'tutor' )
 			);
 			$plugin_meta[] = sprintf(
-				'<a href="%s">%s</a>',
+				'<a href="%s"><strong style="color: #03bd24">%s</strong></a>',
 				esc_url( 'https://www.themeum.com/contact-us/?utm_source=tutor&utm_medium=plugins_installation_list&utm_campaign=plugin_support_link' ),
-				__( '<strong style="color: #03bd24">Get Support</strong>', 'tutor' )
+				esc_html__( 'Get Support', 'tutor' )
 			);
 		}
 
@@ -621,6 +607,51 @@ class Admin {
 	}
 
 	/**
+	 * Orders view page
+	 *
+	 * @since 3.0.0
+	 *
+	 * @return void
+	 */
+	public function orders_view() {
+		$current_page = Input::get( 'page' );
+		$action       = Input::get( 'action' );
+
+		if ( OrderController::PAGE_SLUG === $current_page && 'edit' === $action ) {
+			?>
+				<div class="tutor-admin-wrap tutor-order-details-wrapper">
+					<div id="tutor-order-details-root">
+					</div>
+				</div>
+			<?php
+			return;
+		}
+
+		include tutor()->path . 'views/pages/ecommerce/order-list.php';
+	}
+
+	/**
+	 * Coupons view page
+	 *
+	 * @since 3.0.0
+	 *
+	 * @return void
+	 */
+	public function coupons_view() {
+		$action = Input::get( 'action' );
+		if ( in_array( $action, array( 'add_new', 'edit' ) ) ) {
+			?>
+				<div class="tutor-admin-wrap">
+					<div id="tutor-coupon-root">
+					</div>
+				</div>
+			<?php
+			return;
+		}
+		include tutor()->path . 'views/pages/ecommerce/coupon-list.php';
+	}
+
+	/**
 	 * Show welcome page
 	 *
 	 * @since 1.0.0
@@ -630,5 +661,52 @@ class Admin {
 		Tutor_Setup::mark_as_visited();
 		include tutor()->path . 'views/pages/welcome.php';
 		exit;
+	}
+
+	/**
+	 * Add toolbar items
+	 *
+	 * @since 1.4.6
+	 *
+	 * @param \WP_Admin_Bar $admin_bar admin bar object.
+	 *
+	 * @return mixed
+	 */
+	public function add_toolbar_items( \WP_Admin_Bar $admin_bar ) {
+		global $post;
+
+		$course_id        = Input::get( 'post', 0, Input::TYPE_INT );
+		$course_post_type = tutor()->course_post_type;
+
+		if ( $admin_bar->get_node( 'new-courses' ) ) {
+			$args                = $admin_bar->get_node( 'new-courses' );
+			$args->href          = '#';
+			$args->meta['class'] = 'tutor-create-new-course';
+			$admin_bar->add_node( $args );
+		}
+
+		if ( ! tutor_utils()->can_user_edit_course( get_current_user_id(), $course_id ) ) {
+			return $admin_bar;
+		}
+
+		if (
+				( is_admin() && $post && $course_id && $post->post_type === $course_post_type ) ||
+				( ! is_admin() && is_single() && $post && $course_post_type === $post->post_type )
+			) {
+
+			$admin_bar->add_menu(
+				array(
+					'id'    => 'edit',
+					'title' => __( 'Edit with Course Builder', 'tutor' ),
+					'href'  => tutor_utils()->course_edit_link( $post->ID ),
+					'meta'  => array(
+						'title'  => __( 'Edit with Course Builder', 'tutor' ),
+						'target' => '_blank',
+					),
+				)
+			);
+		}
+
+		return $admin_bar;
 	}
 }

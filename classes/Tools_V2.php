@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Options for TutorLMS
  *
@@ -80,11 +79,7 @@ class Tools_V2 {
 	 */
 	public function load_tools_page() {
 		$tools_fields = $this->get_tools_fields();
-		$tutor_setup  = array( 'tutor-setup' => $tools_fields['tutor-setup'] );
-		unset( $tools_fields['tutor-setup'] );
-		$tools_fields = array_merge( $tools_fields, $tutor_setup );
-
-		$active_tab = Input::get( 'sub_page', 'status' );
+		$active_tab   = Input::get( 'sub_page', 'status' );
 		include tutor()->path . '/views/options/tools.php';
 	}
 
@@ -104,7 +99,7 @@ class Tools_V2 {
 		}
 
 		$attr_tools = array(
-			'status'        => array(
+			'status'         => array(
 				'label'     => __( 'Status', 'tutor' ),
 				'slug'      => 'status',
 				'desc'      => __( 'Status Settings', 'tutor' ),
@@ -310,7 +305,7 @@ class Tools_V2 {
 					),
 				),
 			),
-			'import_export' => array(
+			'import_export'  => array(
 				'label'     => __( 'Import/Export', 'tutor' ),
 				'slug'      => 'import_export',
 				'desc'      => __( 'Import/Export Settings', 'tutor' ),
@@ -319,7 +314,7 @@ class Tools_V2 {
 				'icon'      => 'tutor-icon-import-export',
 				'blocks'    => array(),
 			),
-			'tutor_pages'   => array(
+			'tutor_pages'    => array(
 				'label'     => __( 'Tutor Pages', 'tutor' ),
 				'slug'      => 'tutor_pages',
 
@@ -331,12 +326,14 @@ class Tools_V2 {
 					'block' => array(),
 				),
 			),
-			'tutor-setup'   => array(
-				'label'  => __( 'Setup Wizard', 'tutor' ),
-				'slug'   => 'tutor-setup',
-				'desc'   => __( 'Setup Wizard Settings', 'tutor' ),
-				'icon'   => 'tutor-icon-earth',
-				'blocks' => array(
+			'tutor_rest_api' => array(
+				'label'     => __( 'Rest API', 'tutor' ),
+				'slug'      => 'tutor_rest_api',
+				'desc'      => __( 'Token List', 'tutor' ),
+				'template'  => 'manage-tokens',
+				'view_path' => tutor()->path . 'views/pages/tools/',
+				'icon'      => 'tutor-icon-api',
+				'blocks'    => array(
 					'block' => array(),
 				),
 			),
@@ -473,11 +470,15 @@ class Tools_V2 {
 		$data['max_upload_size'] = esc_html( size_format( $environment['max_upload_size'] ) ) ?? null;
 
 		$data['mysql_version'] = ( version_compare( $environment['mysql_version'], '5.6', '<' ) && ! strstr( $environment['mysql_version_string'], 'MariaDB' ) )
-			? sprintf( esc_html__( '%1$s - We recommend a minimum MySQL version of 5.6. See: %2$s', 'tutor' ), esc_html( $environment['mysql_version_string'] ), '<a href="https://wordpress.org/about/requirements/" target="_blank">' . esc_html__( 'WordPress requirements', 'tutor' ) . '</a>' )
+			?
+			/* translators: 1: MySQL version number, 2: WordPress requirements URL */
+			sprintf( esc_html__( '%1$s - We recommend a minimum MySQL version of 5.6. See: %2$s', 'tutor' ), esc_html( $environment['mysql_version_string'] ), '<a href="https://wordpress.org/about/requirements/" target="_blank">' . esc_html__( 'WordPress requirements', 'tutor' ) . '</a>' )
 			: esc_html( $environment['mysql_version_string'] );
 
 		$data['default_timezone_is_utc'] = ( 'UTC' !== $environment['default_timezone'] )
-			? sprintf( esc_html__( 'Default timezone is %s - it should be UTC', 'tutor' ), esc_html( $environment['default_timezone'] ) )
+			?
+			/* translators: %s: default timezone */
+			sprintf( esc_html__( 'Default timezone is %s - it should be UTC', 'tutor' ), esc_html( $environment['default_timezone'] ) )
 			: '✓';
 
 		$data['fsockopen_curl'] = $environment['fsockopen_or_curl_enabled']
@@ -486,15 +487,21 @@ class Tools_V2 {
 
 		$data['dom_document'] = $environment['domdocument_enabled']
 			? '✓'
-			: sprintf( esc_html__( 'Your server does not have the %s class enabled - HTML/Multipart emails, and also some extensions, will not work without DOMDocument.', 'tutor' ), '<a href="https://php.net/manual/en/class.domdocument.php">DOMDocument</a>' );
+			:
+			/* translators: %s: DOMDocument class */
+			sprintf( esc_html__( 'Your server does not have the %s class enabled - HTML/Multipart emails, and also some extensions, will not work without DOMDocument.', 'tutor' ), '<a href="https://php.net/manual/en/class.domdocument.php">DOMDocument</a>' );
 
 		$data['gzip'] = ( $environment['gzip_enabled'] )
 			? '✓'
-			: sprintf( esc_html__( 'Your server does not support the %s function - this is required to use the GeoIP database from MaxMind.', 'tutor' ), '<a href="https://php.net/manual/en/zlib.installation.php">gzopen</a>' );
+			:
+			/* translators: %s: gzopen function */
+			sprintf( esc_html__( 'Your server does not support the %s function - this is required to use the GeoIP database from MaxMind.', 'tutor' ), '<a href="https://php.net/manual/en/zlib.installation.php">gzopen</a>' );
 
 		$data['multibyte_string'] = ( $environment['mbstring_enabled'] )
 			? '✓'
-			: sprintf( esc_html__( 'Your server does not support the %s functions - this is required for better character encoding. Some fallbacks will be used instead for it.', 'tutor' ), '<a href="https://php.net/manual/en/mbstring.installation.php">mbstring</a>' );
+			:
+			/* translators: %s: mbstring functions */
+			sprintf( esc_html__( 'Your server does not support the %s functions - this is required for better character encoding. Some fallbacks will be used instead for it.', 'tutor' ), '<a href="https://php.net/manual/en/mbstring.installation.php">mbstring</a>' );
 
 		if ( ! null == $type ) {
 			return $data[ $type ];

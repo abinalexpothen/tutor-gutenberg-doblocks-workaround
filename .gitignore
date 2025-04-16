@@ -2,13 +2,11 @@ node_modules/
 assets/css/*
 !assets/css/.gitkeep
 assets/js/*
-!assets/js/lib/
 languages/*
 !languages/.gitkeep
 test/
 build/
 .idea/
-.vscode/
 .history
 .docz/
 .DS_Store
@@ -38,6 +36,20 @@ v2-library/bundle/main.min.js.map
 v2-library/bundle/main.rtl.min.css
 v2-library/bundle/main.rtl.min.css.map
 vendor/
-!v2-library/_src/scss/structure/vendor
+!v2-library/src/scss/structure/vendor
 .phpunit.result.cache
 yarn.lock
+.env
+# Ignore Cypress screenshots
+cypress/screenshots/
+# Ignore Cypress fixtures
+cypress/fixtures/course.json
+cypress/fixtures/assets
+!cypress/fixtures/assets/tutor_bulk_enrollment_sample.csv
+# Ignore specific PNG files
+**/beforeEach*.png
+launch.json
+/tutor-droip
+
+# Copilot Instructions
+.github/copilot-instructions.md

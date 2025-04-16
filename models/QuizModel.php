@@ -10,7 +10,9 @@
 
 namespace Tutor\Models;
 
+use Tutor\Cache\TutorCache;
 use Tutor\Helpers\QueryHelper;
+use TUTOR\Quiz;
 
 /**
  * Class QuizModel
@@ -18,6 +20,10 @@ use Tutor\Helpers\QueryHelper;
  * @since 2.0.10
  */
 class QuizModel {
+
+	const ATTEMPT_STARTED = 'attempt_started';
+	const ATTEMPT_ENDED   = 'attempt_ended';
+	const REVIEW_REQUIRED = 'review_required';
 
 	/**
 	 * Get quiz table name
@@ -29,6 +35,76 @@ class QuizModel {
 	public function get_table(): string {
 		global $wpdb;
 		return $wpdb->prefix . 'tutor_quiz_attempts';
+	}
+
+	/**
+	 * Get total number of quiz
+	 *
+	 * @since 2.0.2
+	 *
+	 * @return int
+	 */
+	public static function get_total_quiz() {
+		global $wpdb;
+
+		$sql = "SELECT COUNT(DISTINCT quiz.ID) 
+			FROM {$wpdb->posts} quiz
+				INNER JOIN {$wpdb->posts} topic ON quiz.post_parent=topic.ID 
+				INNER JOIN {$wpdb->posts} course ON topic.post_parent=course.ID 
+			WHERE course.post_type=%s
+				AND quiz.post_type='tutor_quiz'";
+
+		//phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		return $wpdb->get_var( $wpdb->prepare( $sql, tutor()->course_post_type ) );
+	}
+
+	/**
+	 * Get Attempt row by grade method settings
+	 *
+	 * @since 1.4.2
+	 *
+	 * @param int $quiz_id quiz id.
+	 * @param int $user_id user id.
+	 *
+	 * @return array|bool|null|object
+	 */
+	public function get_quiz_attempt( $quiz_id = 0, $user_id = 0 ) {
+		global $wpdb;
+
+		$quiz_id = tutils()->get_post_id( $quiz_id );
+		$user_id = tutils()->get_user_id( $user_id );
+
+		$attempt = false;
+
+		$quiz_grade_method = get_tutor_option( 'quiz_grade_method', 'highest_grade' );
+		$from_string       = "FROM {$wpdb->tutor_quiz_attempts} WHERE quiz_id = %d AND user_id = %d AND attempt_status != 'attempt_started' ";
+
+		//phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( 'highest_grade' === $quiz_grade_method ) {
+			$attempt = $wpdb->get_row( $wpdb->prepare( "SELECT * {$from_string} ORDER BY earned_marks DESC LIMIT 1; ", $quiz_id, $user_id ) );
+		} elseif ( 'average_grade' === $quiz_grade_method ) {
+
+			$attempt = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT {$wpdb->tutor_quiz_attempts}.*,
+						COUNT(attempt_id) AS attempt_count,
+						AVG(total_marks) AS total_marks,
+						AVG(earned_marks) AS earned_marks {$from_string}
+				",
+					$quiz_id,
+					$user_id
+				)
+			);
+		} elseif ( 'first_attempt' === $quiz_grade_method ) {
+
+			$attempt = $wpdb->get_row( $wpdb->prepare( "SELECT * {$from_string} ORDER BY attempt_id ASC LIMIT 1; ", $quiz_id, $user_id ) );
+		} elseif ( 'last_attempt' === $quiz_grade_method ) {
+
+			$attempt = $wpdb->get_row( $wpdb->prepare( "SELECT * {$from_string} ORDER BY attempt_id DESC LIMIT 1; ", $quiz_id, $user_id ) );
+		}
+		//phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return $attempt;
 	}
 
 	/**
@@ -48,7 +124,7 @@ class QuizModel {
 		$user_id = tutor_utils()->get_user_id( $user_id );
 
 		$cache_key = "tutor_quiz_attempts_for_{$user_id}_{$quiz_id}";
-		$attempts  = wp_cache_get( $cache_key );
+		$attempts  = TutorCache::get( $cache_key );
 
 		if ( false === $attempts ) {
 			$attempts = $wpdb->get_results(
@@ -63,9 +139,8 @@ class QuizModel {
 					$user_id
 				)
 			);
-			wp_cache_set( $cache_key,  $attempts );
+			TutorCache::set( $cache_key, $attempts );
 		}
-		
 
 		if ( is_array( $attempts ) && count( $attempts ) ) {
 			return $attempts;
@@ -200,7 +275,19 @@ class QuizModel {
 		}
 
 		// Set query based on action tab.
-		$pass_mark     = "(((SUBSTRING_INDEX(SUBSTRING_INDEX(quiz_attempts.attempt_info, '\"passing_grade\";s:2:\"', -1), '\"', 1))/100)*quiz_attempts.total_marks)";
+		$pass_mark     = "((( SUBSTRING_INDEX(
+			SUBSTRING_INDEX(
+			  attempt_info,
+			  CONCAT(
+				  '\"passing_grade\";s:',
+				  SUBSTRING_INDEX(SUBSTRING_INDEX(attempt_info, '\"passing_grade\";s:', -1), ':\"', 1),
+				  ':\"'
+			  ),
+			  -1
+			), 
+			'\"', 
+			1
+  		))/100) * quiz_attempts.total_marks)";
 		$pending_count = "(SELECT COUNT(DISTINCT attempt_answer_id) FROM {$wpdb->prefix}tutor_quiz_attempt_answers WHERE quiz_attempt_id=quiz_attempts.attempt_id AND is_correct IS NULL)";
 
 		$tab_join   = '';
@@ -217,8 +304,7 @@ class QuizModel {
 
 			case 'fail':
 				// Check if earned marks is less than pass mark and there is no pending question.
-				$tab_clause = " AND quiz_attempts.earned_marks < {$pass_mark}
-									AND {$pending_count} = 0 ";
+				$tab_clause = " AND quiz_attempts.earned_marks < {$pass_mark} AND {$pending_count} < 1 ";
 				break;
 			case 'pending':
 				$tab_clause = " AND {$pending_count} > 0 ";
@@ -294,8 +380,15 @@ class QuizModel {
 	 *
 	 * @return mixed
 	 */
-	public static function get_quiz_attempts( $start = 0, $limit = 10, $search_filter = '', $course_filter = '', $date_filter = '', $order_filter = 'DESC', $result_state = null, $count_only = false, $instructor_id_check = false ) {
+	public static function get_quiz_attempts( $start = 0, $limit = 10, $search_filter = '', $course_filter = array(), $date_filter = '', $order_filter = 'DESC', $result_state = null, $count_only = false, $instructor_id_check = false ) {
 		global $wpdb;
+
+		$start         = sanitize_text_field( $start );
+		$limit         = sanitize_text_field( $limit );
+		$search_filter = sanitize_text_field( $search_filter );
+		$course_filter = sanitize_text_field( $course_filter );
+		$date_filter   = sanitize_text_field( $date_filter );
+		$order_filter  = sanitize_sql_orderby( $order_filter );
 
 		$search_term_raw = $search_filter;
 		$search_filter   = '%' . $wpdb->esc_like( $search_filter ) . '%';
@@ -303,7 +396,7 @@ class QuizModel {
 		// Filter by course.
 		if ( '' != $course_filter ) {
 			! is_array( $course_filter ) ? $course_filter = array( $course_filter ) : 0;
-			$course_ids                                   = implode( ',', $course_filter );
+			$course_ids                                   = implode( ',', array_map( 'intval', $course_filter ) );
 			$course_filter                                = " AND quiz_attempts.course_id IN ($course_ids) ";
 		}
 
@@ -315,7 +408,19 @@ class QuizModel {
 		$select_columns = $count_only ? 'COUNT(DISTINCT quiz_attempts.attempt_id)' : 'DISTINCT quiz_attempts.*, quiz.post_title, users.user_email, users.user_login, users.display_name';
 		$limit_offset   = $count_only ? '' : ' LIMIT ' . $limit . ' OFFSET ' . $start;
 
-		$pass_mark     = "(((SUBSTRING_INDEX(SUBSTRING_INDEX(quiz_attempts.attempt_info, '\"passing_grade\";s:2:\"', -1), '\"', 1))/100)*quiz_attempts.total_marks)";
+		$pass_mark     = "((( SUBSTRING_INDEX(
+			SUBSTRING_INDEX(
+			  attempt_info,
+			  CONCAT(
+				  '\"passing_grade\";s:',
+				  SUBSTRING_INDEX(SUBSTRING_INDEX(attempt_info, '\"passing_grade\";s:', -1), ':\"', 1),
+				  ':\"'
+			  ),
+			  -1
+			), 
+			'\"', 
+			1
+  		))/100) * quiz_attempts.total_marks)";
 		$pending_count = "(SELECT COUNT(DISTINCT attempt_answer_id) FROM {$wpdb->prefix}tutor_quiz_attempt_answers WHERE quiz_attempt_id=quiz_attempts.attempt_id AND is_correct IS NULL)";
 
 		// Get attempts by instructor ID.
@@ -341,8 +446,7 @@ class QuizModel {
 
 			case 'fail':
 				// Check if earned marks is less than pass mark and there is no pending question.
-				$result_clause = " AND quiz_attempts.earned_marks<{$pass_mark}
-								   AND {$pending_count}=0 ";
+				$result_clause = " AND quiz_attempts.earned_marks<{$pass_mark} AND {$pending_count} < 1 ";
 				break;
 
 			case 'pending':
@@ -357,7 +461,7 @@ class QuizModel {
 					INNER JOIN {$wpdb->posts} quiz ON quiz_attempts.quiz_id = quiz.ID
 					INNER JOIN {$wpdb->users} AS users ON quiz_attempts.user_id = users.ID
 					INNER JOIN {$wpdb->posts} AS course ON course.ID = quiz_attempts.course_id
-					INNER JOIN {$wpdb->prefix}tutor_quiz_attempt_answers AS ans ON quiz_attempts.attempt_id = ans.quiz_attempt_id
+					-- INNER JOIN {$wpdb->prefix}tutor_quiz_attempt_answers AS ans ON quiz_attempts.attempt_id = ans.quiz_attempt_id
 					{$instructor_clause}
 			WHERE 	quiz_attempts.attempt_ended_at IS NOT NULL
 					AND (
@@ -432,8 +536,9 @@ class QuizModel {
 	public static function get_quiz_attempts_by_course_ids( $start = 0, $limit = 10, $course_ids = array(), $search_filter = '', $course_filter = '', $date_filter = '', $order_filter = '', $user_id = null, $count_only = false, $all_attempt = false ) {
 		global $wpdb;
 		$search_filter = sanitize_text_field( $search_filter );
-		$course_filter = sanitize_text_field( $course_filter );
+		$course_filter = (int) sanitize_text_field( $course_filter );
 		$date_filter   = sanitize_text_field( $date_filter );
+		$order_filter  = sanitize_sql_orderby( $order_filter );
 
 		$course_ids = array_map(
 			function ( $id ) {
@@ -448,7 +553,7 @@ class QuizModel {
 		$search_term_raw = $search_filter;
 		$search_filter   = $search_filter ? "AND ( users.user_email = '{$search_term_raw}' OR users.display_name LIKE {$search_filter} OR quiz.post_title LIKE {$search_filter} OR course.post_title LIKE {$search_filter} )" : '';
 
-		$course_filter = '' != $course_filter ? " AND quiz_attempts.course_id = $course_filter " : '';
+		$course_filter = 0 !== $course_filter ? " AND quiz_attempts.course_id = $course_filter " : '';
 		$date_filter   = '' != $date_filter ? tutor_get_formated_date( 'Y-m-d', $date_filter ) : '';
 		$date_filter   = '' != $date_filter ? " AND  DATE(quiz_attempts.attempt_started_at) = '$date_filter' " : '';
 		$user_filter   = $user_id ? ' AND user_id=\'' . esc_sql( $user_id ) . '\' ' : '';
@@ -507,10 +612,7 @@ class QuizModel {
 		}
 
 		$order = ' answer_order ASC ';
-		if ( 'ordering' === $question->question_type ) {
-			$order = ' RAND() ';
-		}
-
+		
 		if ( $rand ) {
 			$order = ' RAND() ';
 		}
@@ -557,8 +659,7 @@ class QuizModel {
 		//phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$results = $wpdb->get_results(
 			"SELECT answers.*,
-					question.question_title,
-					question.question_type
+					question.*
 			FROM 	{$wpdb->prefix}tutor_quiz_attempt_answers answers
 					LEFT JOIN {$wpdb->prefix}tutor_quiz_questions question
 						   ON answers.question_id = question.question_id
@@ -747,5 +848,296 @@ class QuizModel {
 			$order
 		);
 		return $attempt;
+	}
+
+	/**
+	 * Get total number of quizzes by course id
+	 *
+	 * @since 2.2.0
+	 *
+	 * @param int|array $course_id Course id or array of course ids.
+	 *
+	 * @return int
+	 */
+	public static function get_quiz_count_by_course( $course_id ) {
+		global $wpdb;
+
+		$and_clause = is_array( $course_id ) && count( $course_id ) ? ' AND post_parent IN (' . QueryHelper::prepare_in_clause( $course_id ) . ')' : "AND post_parent = $course_id";
+
+		//phpcs:disable
+		$count = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT
+					COUNT(ID) 
+				FROM {$wpdb->posts}
+				WHERE post_parent IN 
+					(SELECT
+						ID 
+					FROM {$wpdb->posts} 
+						WHERE post_type = %s
+						{$and_clause}
+						AND post_status = %s
+					)
+					AND post_type = %s 
+					AND post_status = %s",
+				'topics',
+				'publish',
+				'tutor_quiz',
+				'publish'
+			)
+		);
+		//phpcs:enable
+		return $count ? $count : 0;
+	}
+
+	/**
+	 * Get final quiz result depending on all attempts.
+	 *
+	 * @since 2.4.0
+	 *
+	 * @param int $quiz_id quiz id.
+	 * @param int $user_id user id.
+	 *
+	 * @return string pass, fail, pending
+	 */
+	public static function get_quiz_result( $quiz_id, $user_id = 0 ) {
+		global $wpdb;
+
+		$all_pending = true;
+		$result      = 'pending';
+
+		$user_id      = tutor_utils()->get_user_id( $user_id );
+		$attempt_list = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}tutor_quiz_attempts WHERE user_id=%d AND quiz_id=%d", $user_id, $quiz_id ) );
+
+		$total_pending_attempt = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(quiz_attempt_id) total_pending_attempt
+				FROM (
+					SELECT qa.quiz_attempt_id, COUNT(*) AS total_pending
+					FROM {$wpdb->prefix}tutor_quiz_attempt_answers qa
+					WHERE qa.quiz_id = %d AND qa.user_id=%d AND qa.is_correct IS NULL
+					GROUP BY qa.quiz_attempt_id
+				) a
+				",
+				$quiz_id,
+				$user_id
+			)
+		);
+
+		if ( count( $attempt_list ) !== $total_pending_attempt ) {
+			$all_pending = false;
+		}
+
+		if ( false === $all_pending ) {
+			$required_percentage = tutor_utils()->get_quiz_option( $quiz_id, 'passing_grade', 0 );
+			foreach ( $attempt_list as $attempt ) {
+				$earned_percentage = $attempt->earned_marks > 0 ? ( ( $attempt->earned_marks * 100 ) / $attempt->total_marks ) : 0;
+				if ( $earned_percentage >= $required_percentage ) {
+					// If at least one attempt passed then quiz passed.
+					$result = 'pass';
+					break;
+				} else {
+					$result = 'fail';
+				}
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Get quiz attempt details
+	 *
+	 * @since 2.6.1
+	 *
+	 * @param integer $attempt_id attempt id.
+	 *
+	 * @return mixed
+	 */
+	public static function quiz_attempt_details( int $attempt_id ) {
+		global $wpdb;
+
+		$table_quiz_attempt_answers  = $wpdb->prefix . 'tutor_quiz_attempt_answers';
+		$table_quiz_questions        = $wpdb->prefix . 'tutor_quiz_questions';
+		$table_quiz_attempts         = $wpdb->prefix . 'tutor_quiz_attempts';
+		$table_quiz_question_answers = $wpdb->prefix . 'tutor_quiz_question_answers';
+
+		$query = "SELECT 
+				ques.question_id, 
+				ques.question_title, 
+				ques.question_type, 
+				(
+				SELECT 
+					GROUP_CONCAT(answer_title) 
+				FROM 
+					{$table_quiz_question_answers} 
+				WHERE 
+					belongs_question_id = ques.question_id 
+					AND is_correct = 1
+				) AS correct_answers,
+				
+				(
+			
+				SELECT
+			
+				CASE
+					WHEN CHAR_LENGTH(att_ans.given_answer) = 1 AND att_ans.given_answer REGEXP '^[0-9]$' THEN
+					-- If given_answer is a single digit integer
+					(
+						SELECT
+						answer_title
+						FROM
+						{$table_quiz_question_answers}
+						WHERE
+						answer_id = CAST(att_ans.given_answer AS UNSIGNED)
+					)
+					WHEN CHAR_LENGTH(att_ans.given_answer) > 1 AND SUBSTRING(att_ans.given_answer, 1, 2) = 'a:' THEN
+					-- If given_answer is serialized array
+					(
+						att_ans.given_answer
+					)
+					ELSE
+					-- If given_answer is a serialized string
+					att_ans.given_answer
+				END
+				) AS given_answer, 
+				att_ans.question_mark, 
+				att_ans.achieved_mark, 
+				att_ans.is_correct,
+				(
+					SELECT 
+						attempt_info
+					FROM {$table_quiz_attempts}
+					WHERE attempt_id = {$attempt_id}
+					LIMIT 1
+				) AS attempt_info
+			FROM 
+				{$table_quiz_attempt_answers} AS att_ans 
+				JOIN {$table_quiz_questions} AS ques ON ques.question_id = att_ans.question_id 
+				JOIN {$table_quiz_question_answers} AS ans ON ans.answer_id = att_ans.attempt_answer_id 
+			WHERE 
+				quiz_attempt_id = %d
+			LIMIT 
+				50		
+		";
+
+		//phpcs:ignore
+		$result = $wpdb->get_results( $wpdb->prepare( $query, $attempt_id ) );
+
+		// If array and count result then loop with each result and prepare given answer.
+		if ( is_array( $result ) && count( $result ) ) {
+			foreach ( $result as $key => $value ) {
+				// Check if given answer is a serialized string.
+				if ( is_serialized( $value->given_answer ) ) {
+					$given_answers                = tutor_utils()->get_answer_by_id( maybe_unserialize( $value->given_answer ) );
+					$result[ $key ]->given_answer = array_column( $given_answers, 'answer_title' );
+				} elseif ( is_numeric( $value->given_answer ) ) {
+					$given_answers                = tutor_utils()->get_answer_by_id( maybe_unserialize( $value->given_answer ) );
+					$result[ $key ]->given_answer = array_column( $given_answers, 'answer_title' );
+				}
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Get a question record.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param int $question_id quiz question id.
+	 *
+	 * @return array|object|null|void
+	 */
+	public static function get_question( $question_id ) {
+		global $wpdb;
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}tutor_quiz_questions WHERE question_id = %d", $question_id ) );
+	}
+
+	/**
+	 * Get all answer's of a quiz question.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param int    $question_id question id.
+	 * @param string $question_type question type.
+	 *
+	 * @return array
+	 */
+	public static function get_question_answers( $question_id, $question_type = null ) {
+		global $wpdb;
+
+		$query = "SELECT * FROM {$wpdb->prefix}tutor_quiz_question_answers WHERE belongs_question_id = %d";
+
+		if ( $question_type ) {
+			$query .= ' AND belongs_question_type = %s ORDER BY answer_order ASC';
+			//phpcs:ignore
+			$answers = $wpdb->get_results( $wpdb->prepare( $query, $question_id, $question_type ) );
+		} else {
+			$query .= ' ORDER BY answer_order ASC';
+			//phpcs:ignore
+			$answers = $wpdb->get_results( $wpdb->prepare( $query, $question_id ) );
+		}
+
+		foreach ( $answers as $answer ) {
+			$answer->answer_title = stripslashes( $answer->answer_title );
+			if ( $answer->image_id ) {
+				$answer->image_url = wp_get_attachment_url( $answer->image_id );
+			}
+		}
+
+		return $answers;
+	}
+
+	/**
+	 * Get next answer order SL no
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param int $question_id question id.
+	 * @param int $question_type question type.
+	 *
+	 * @return int
+	 */
+	public static function get_next_answer_order( $question_id, $question_type ) {
+		global $wpdb;
+		$max_id = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT MAX(answer_order) FROM {$wpdb->prefix}tutor_quiz_question_answers WHERE belongs_question_id = %d AND belongs_question_type = %s",//phpcs:ignore
+				$question_id,
+				$question_type
+			)
+		);
+
+		return $max_id + 1;
+	}
+
+	/**
+	 * Get quiz details by quiz id.
+	 *
+	 * @since 3.0.0
+	 *
+	 * @param int $quiz_id quiz id.
+	 *
+	 * @return object
+	 */
+	public static function get_quiz_details( $quiz_id ) {
+		$quiz              = get_post( $quiz_id );
+		$quiz->quiz_option = get_post_meta( $quiz_id, Quiz::META_QUIZ_OPTION, true );
+		$quiz->questions   = tutor_utils()->get_questions_by_quiz( $quiz_id );
+
+		if ( ! is_array( $quiz->questions ) ) {
+			$quiz->questions = array();
+		}
+
+		foreach ( $quiz->questions as $question ) {
+			$question->question_answers = self::get_question_answers( $question->question_id, $question->question_type );
+			if ( isset( $question->question_settings ) ) {
+				$question->question_settings = maybe_unserialize( $question->question_settings );
+			}
+		}
+
+		return $quiz;
 	}
 }

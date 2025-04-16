@@ -117,10 +117,12 @@ document.addEventListener('DOMContentLoaded', function () {
 				const { target } = e;
 				const min = Number(target.getAttribute('min') || -Infinity);
 				const max = Number(target.getAttribute('max') || Infinity);
+				const numberType = target.getAttribute('data-number-type') || 'decimal';
 				const value = Number(target.value);
-				
+
 				if (min !== -Infinity && value <= min) e.target.value = min;
 				if (max !== Infinity && value >= max) e.target.value = max;
+				if (['integer', 'int'].includes(numberType)) e.target.value = parseInt(e.target.value)
 			};
 		});
 	};
@@ -132,10 +134,10 @@ document.addEventListener('DOMContentLoaded', function () {
 			let pageTitle = pageNeedsValidation && pageNeedsValidation.querySelector('[tutor-option-title]').innerText;
 
 			let invalidMessage = '"' + pageTitle + ' > ' + invalidLabel + '" email is invalid!';
-			if (false === validateEmail(emailField.value)) {
+			if (emailField.value && false === validateEmail(emailField.value)) {
 				emailField.style.borderColor = 'red';
 				emailField.focus();
-				tutor_toast('Warning', invalidMessage, 'error');
+				tutor_toast(__('Warning', 'tutor'), invalidMessage, 'error');
 			} else {
 				formSubmit = true;
 			}
@@ -153,7 +155,7 @@ document.addEventListener('DOMContentLoaded', function () {
 	const inputNumberFields = document.querySelectorAll('.tutor-form-control[type="number"]');
 	// const inputNumberFields = document.querySelectorAll('[type="number"]');
 
-	if(inputNumberFields.length) checkNumberFields(inputNumberFields);
+	if (inputNumberFields.length) checkNumberFields(inputNumberFields);
 
 	if (0 !== inputEmailFields.length) {
 		checkEmailFields(inputEmailFields);
@@ -184,7 +186,13 @@ document.addEventListener('DOMContentLoaded', function () {
 			checkEmailFieldsOnSubmit(inputEmailFields);
 		}
 
-		// console.log(formSubmit);
+
+		// Only keep action and properties that starts with tutor_option
+		data = Object.fromEntries(
+			Object.entries(data).filter(([key, value]) => {
+				return key === 'action' || key.startsWith('tutor_option');
+			})
+		);
 
 		if (true === formSubmit) {
 			if (!e.detail || e.detail == 1) {
@@ -197,19 +205,21 @@ document.addEventListener('DOMContentLoaded', function () {
 						button.attr('disabled', true);
 					},
 					success: function (resp) {
-						const { data = {}, success } = resp || {};
-						const { message = __('Something Went Wrong!', 'tutor') } = data;
+						const { data = {}, success, message = __('Settings Saved', 'tutor'), reload_required = false } = resp || {};
 
 						if (success) {
-							// Disableing save btn after saved successfully
+							// Disabling save btn after saved successfully
 							if (document.getElementById('save_tutor_option')) {
 								document.getElementById('save_tutor_option').disabled = true;
 							}
-							tutor_toast('Success!', __('Settings Saved', 'tutor'), 'success');
-							return;
+							tutor_toast(__('Success!', 'tutor'), message, 'success');
+							window.dispatchEvent(new CustomEvent('tutor_option_saved', { detail: data }));
+							if (reload_required) {
+								window.location.reload(true);
+							}
+						} else {
+							tutor_toast(__('Warning!', 'tutor'), message, 'warning');
 						}
-
-						tutor_toast('Error!', message, 'error');
 					},
 					complete: function () {
 						button.removeClass('is-loading');
@@ -373,15 +383,14 @@ document.addEventListener('DOMContentLoaded', function () {
 	function highlightSearchedItem(dataKey) {
 		const target = document.querySelector(`#${dataKey}`);
 		const targetEl = target && target.querySelector(`[tutor-option-name]`);
-		const scrollTargetEl = target && target.parentNode.querySelector('.tutor-option-field-row');
 
-		if (scrollTargetEl) {
+		if (targetEl) {
 			targetEl.classList.add('isHighlighted');
 			setTimeout(() => {
 				targetEl.classList.remove('isHighlighted');
 			}, 6000);
 
-			scrollTargetEl.scrollIntoView({
+			targetEl.scrollIntoView({
 				behavior: 'smooth',
 				block: 'center',
 				inline: 'nearest',
@@ -392,20 +401,11 @@ document.addEventListener('DOMContentLoaded', function () {
 	}
 
 	/**
-	 * Show/Hide setting option
-	 * @param object element			Dom object
-	 * @param string value 				change value
-	 * @param string required_value		Required value for match the conditon for show, else it will hide
-	 * @return void
-	 * 
-	 * @since 2.0.7
+	 * Highlight items form query params
 	 */
-	function showHideOption(element, value, required_value) {
-		if (element.style === undefined) return;
-
-		value === (required_value !== undefined ? required_value : 'on')
-			? element.style.display = 'grid'
-			: element.style.display = 'none'
+	const urlParams = new URLSearchParams(window.location.search);
+	if (urlParams.get('highlight')) {
+		highlightSearchedItem(urlParams.get('highlight'));
 	}
 
 	/**
@@ -432,6 +432,96 @@ document.addEventListener('DOMContentLoaded', function () {
 	}
 
 	/**
+	 * On toggle switch change - show, hide setting's elements
+	 * @since 2.1.9
+	 */
+	function showHideToggleChildren(el) {
+		let isChecked = el.is(':checked')
+		let fields = el.data('toggle-fields').split(',')
+		if (Array.isArray(fields) === false || fields.length === 0) return
+
+		fields = fields.map(s => s.trim());
+		isChecked
+			? fields.forEach((f) => $('#field_' + f).removeClass('tutor-hide-option'))
+			: fields.forEach((f) => $('#field_' + f).addClass('tutor-hide-option'))
+
+		let toggleWrapper = el.parent().parent().parent()
+		let sectionWrapper = el.parent().parent().parent().parent()
+		let visibleElements = sectionWrapper.find('.tutor-option-field-row').not('div.tutor-hide-option').length
+
+		visibleElements === 1
+			? toggleWrapper.addClass('tutor-option-no-bottom-border')
+			: toggleWrapper.removeClass('tutor-option-no-bottom-border')
+
+	}
+
+	const btnToggles = $('input[type="checkbox"][data-toggle-fields]')
+	btnToggles.each(function () {
+		showHideToggleChildren($(this))
+	})
+
+	btnToggles.change(function () {
+		showHideToggleChildren($(this))
+	})
+
+	/**
+	 * On toggle switch change - show, hide setting's blocks
+	 * @since 3.0.0
+	 */
+	function showHideToggleBlock(el) {
+		let isChecked = el.is(':checked')
+		let fields = el.data('toggle-blocks').split(',')
+		if (Array.isArray(fields) === false || fields.length === 0) return
+
+		fields = fields.map(s => s.trim());
+		fields.forEach((f) => {
+			if (isChecked) {
+				$(`.tutor-option-single-item.${f}`).removeClass('tutor-d-none');
+			} else {
+				$(`.tutor-option-single-item.${f}`).addClass('tutor-d-none');
+			}
+		});
+	}
+
+	const btnToggleBlocks = $('input[type="checkbox"][data-toggle-blocks]');
+	btnToggleBlocks.each(function () {
+		showHideToggleBlock($(this));
+	});
+
+	btnToggleBlocks.change(function () {
+		showHideToggleBlock($(this));
+	});
+
+	/**
+	 * Show/Hide setting option
+	 * @param object element			Dom object
+	 * @param conditionFn function	Condition function
+	 * @return void
+	 * 
+	 * @since 2.0.7
+	 */
+	function showHideOption(element, conditionFn) {
+		if (!element) return;
+
+		if (conditionFn()) {
+			element.classList.remove("tutor-d-none");
+		} else {
+			element.classList.add("tutor-d-none");
+		}
+
+		// Remove border if only one item left.
+		const blockWrapper = element.closest(".item-wrapper");
+		if (blockWrapper) {
+			const displayItems = blockWrapper.querySelectorAll(".tutor-option-field-row:not(.tutor-d-none)");
+			if (displayItems.length && displayItems.length === 1) {
+				displayItems[0].classList.add("tutor-option-no-bottom-border");
+			} else {
+				displayItems[0].classList.remove("tutor-option-no-bottom-border");
+			}
+		}
+	}
+
+	/**
 	 * Woocommerce order auto complete
 	 *
 	 * @since 2.0.5
@@ -439,49 +529,113 @@ document.addEventListener('DOMContentLoaded', function () {
 	 * Invoice generate options added
 	 *
 	 * @since 2.1.4
+	 * 
+	 * Monetization options refactored
+	 *
+	 * @since 3.0.0
 	 */
 	const monetization_field = document.querySelector("[name='tutor_option[monetize_by]']");
-	const order_autocomplete_wrapper = document.getElementById('field_tutor_woocommerce_order_auto_complete');
-
-	const invoice_field = document.querySelector("[name='tutor_option[tutor_woocommerce_invoice]']");
-	const invoice_field_wrapper = document.getElementById('field_tutor_woocommerce_invoice');
-
-	if (invoice_field) {
-		showHideOption(invoice_field_wrapper, monetization_field.value, 'wc')
-	}
-
 	if (monetization_field) {
-		showHideOption(order_autocomplete_wrapper, monetization_field.value, 'wc');
+		const monetized_by = monetization_field?.value;
+		const revenue_sharing_checkbox = document.querySelector("[data-toggle-fields=sharing_percentage]");
+		const revenue_sharing_engines = ['tutor', 'wc', 'edd', 'pmpro', 'restrict-content-pro'];
+
+		const woocommerce_block = document.querySelector(".tutor-option-single-item.woocommerce");
+		const currency_block = document.querySelector(".tutor-option-single-item.ecommerce_currency");
+		const revenue_sharing_block = document.querySelector(".tutor-option-single-item.revenue_sharing");
+		const fees_block = document.querySelector(".tutor-option-single-item.fees");
+		const withdraw_block = document.querySelector(".tutor-option-single-item.withdraw");
+		const invoice_block = document.querySelector(".tutor-option-single-item.ecommerce_invoice");
+
+		const cart_page_field = document.querySelector("#field_tutor_cart_page_id");
+		const checkout_page_field = document.querySelector("#field_tutor_checkout_page_id");
+
+		showHideOption(woocommerce_block, () => monetized_by === 'wc');
+		showHideOption(currency_block, () => monetized_by === 'tutor');
+		showHideOption(cart_page_field, () => monetized_by === 'tutor');
+		showHideOption(checkout_page_field, () => monetized_by === 'tutor');
+		showHideOption(invoice_block, () => monetized_by === 'tutor');
+
+		showHideOption(revenue_sharing_block, () => revenue_sharing_engines.includes(monetized_by));
+		showHideOption(fees_block, () => revenue_sharing_engines.includes(monetized_by) && revenue_sharing_checkbox?.checked);
+		showHideOption(withdraw_block, () => revenue_sharing_engines.includes(monetized_by) && revenue_sharing_checkbox?.checked);
+
+		// Handle monetization fields on change.
 		monetization_field.onchange = (e) => {
-			showHideOption(order_autocomplete_wrapper, e.target.value, 'wc');
-			showHideOption(invoice_field_wrapper, e.target.value, 'wc');
+			const value = e.target.value;
+			showHideOption(woocommerce_block, () => value === 'wc');
+			showHideOption(currency_block, () => value === 'tutor');
+			showHideOption(cart_page_field, () => value === 'tutor');
+			showHideOption(checkout_page_field, () => value === 'tutor');
+			showHideOption(invoice_block, () => value === 'tutor');
+
+			showHideOption(revenue_sharing_block, () => revenue_sharing_engines.includes(value));
+			showHideOption(fees_block, () => revenue_sharing_engines.includes(value) && revenue_sharing_checkbox?.checked);
+			showHideOption(withdraw_block, () => revenue_sharing_engines.includes(value) && revenue_sharing_checkbox?.checked);
 		}
 	}
-	/**
-	 * Option (sharing_percentage) toggle on enable_revenue_sharing option change
-	 * @since 2.0.7
-	 */
-	const revenue_sharing_field = document.querySelector("[name='tutor_option[enable_revenue_sharing]']");
-	const sharing_percent_wrapper = document.getElementById("field_sharing_percentage");
-	if (revenue_sharing_field) {
-		showHideOption(sharing_percent_wrapper, revenue_sharing_field.value)
-		changeListener(revenue_sharing_field, (value) => showHideOption(sharing_percent_wrapper, value));
-	}
 
 	/**
-	 * Show/Hide fees_name and fee_amount_type on deduct fee option toggle
-	 * @since 2.1.0
+	 * Maxlength counter for Textarea and Text field.
+	 * @since 2.2.3
 	 */
-	const enable_fees_deducting_field = document.querySelector("[name='tutor_option[enable_fees_deducting]']");
-	const field_fees_name_wrapper = document.getElementById("field_fees_name");
-	const field_fee_amount_type_wrapper = document.getElementById("field_fee_amount_type");
-	if (enable_fees_deducting_field) {
-		showHideOption(field_fees_name_wrapper, enable_fees_deducting_field.value)
-		showHideOption(field_fee_amount_type_wrapper, enable_fees_deducting_field.value)
+	let maxLengthTargets = $('.tutor-option-field-input textarea[maxlength], .tutor-option-field-input input[maxlength]')
+	maxLengthTargets.each(function () {
+		let el = $(this),
+			max = $(this).attr('maxlength'),
+			len = $(this).val().length,
+			text = `${len}/${max}`;
 
-		changeListener(enable_fees_deducting_field, (value) => {
-			showHideOption(field_fees_name_wrapper, value)
-			showHideOption(field_fee_amount_type_wrapper, value)
+		el.css('margin-right', 0)
+		$(this).parent().append(`<div class="tutor-field-maxlength-info tutor-mr-4 tutor-fs-8 tutor-color-muted">${text}</div>`)
+	});
+
+	maxLengthTargets.keyup(function () {
+		let el = $(this),
+			max = $(this).attr('maxlength'),
+			len = $(this).val().length,
+			text = `${len}/${max}`;
+
+		el.parent().find('.tutor-field-maxlength-info').text(text)
+	})
+
+	/**
+	 * Tutor option password type hide and show
+	 * 
+	 * @since 3.0.0
+	 */
+	document.querySelectorAll('.tutor-option-field-input .tutor-type-password').forEach((item) => {
+		const input = item.querySelector('input');
+		const button = item.querySelector('button');
+		const icon = button?.querySelector('i');
+
+		if (!input || !button || !icon) {
+			return;
+		}
+
+		button.addEventListener('click', () => {
+			const isPassword = input.type === 'password';
+			input.type = isPassword ? 'text' : 'password';
+			icon.className = isPassword ? 'tutor-icon-eye-bold' : 'tutor-icon-eye-slash-bold';
+		});
+	});
+
+	/**
+	 * Tutor option withdraw bank transfer instruction hide and show
+	 * 
+	 * @since 3.0.0
+	 */
+	const bankTransferInput = document.querySelector('#tutor_check_bank_transfer_withdraw');
+	const bankTransferInstruction = document.querySelector('#field_tutor_bank_transfer_withdraw_instruction');
+	if (bankTransferInput && bankTransferInstruction) {
+		if (!bankTransferInput.checked) {
+			bankTransferInstruction.classList.add('tutor-d-none');
+			bankTransferInstruction.previousElementSibling?.classList.add('tutor-option-no-bottom-border');
+		}
+
+		bankTransferInput.addEventListener('change', (e) => {
+			bankTransferInstruction.classList.toggle('tutor-d-none', !e.target.checked);
+			bankTransferInstruction.previousElementSibling?.classList.toggle('tutor-option-no-bottom-border', !e.target.checked);
 		});
 	}
 });
